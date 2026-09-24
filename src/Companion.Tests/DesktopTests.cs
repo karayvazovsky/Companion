@@ -85,12 +85,17 @@ public class DesktopTests
         var onFront = PerchPlanner.ForDrop(700, 300 - 64 + 10, Size, Screens, [front, behind]);
         Assert.Equal(new Perch(PerchKind.WindowTop, 700, 236, 10, 300), onFront);
 
-        // Frontmost window's top is far from the drop; a window further back has a top within
-        // snap distance, but it's never examined because only the frontmost window under the
-        // pet counts. The drop falls through to Free rather than snapping to the back window.
+        // Frontmost window's top is far from the drop and it doesn't cover the drop point: the
+        // window further back, whose top is within snap distance, is used.
         var farFront = new DesktopWindow(1, new RectD(500, 100, 800, 50));
         var nearBehind = new DesktopWindow(2, new RectD(500, 690, 800, 50));
-        var ignoresBackWindow = PerchPlanner.ForDrop(700, 700 - 64 + 10, Size, Screens, [farFront, nearBehind]);
+        var usesBackWindow = PerchPlanner.ForDrop(700, 700 - 64 + 10, Size, Screens, [farFront, nearBehind]);
+        Assert.Equal(new Perch(PerchKind.WindowTop, 700, 626, 2, 200), usesBackWindow);
+
+        // Frontmost window covers the drop point (the pet's bottom centre): everything behind it is
+        // hidden, so the back window's nearby top is ignored and the drop stays Free.
+        var coveringFront = new DesktopWindow(1, new RectD(500, 100, 800, 700));
+        var ignoresBackWindow = PerchPlanner.ForDrop(700, 700 - 64 + 10, Size, Screens, [coveringFront, nearBehind]);
         Assert.Equal(new Perch(PerchKind.Free, 700, 646), ignoresBackWindow);
     }
 

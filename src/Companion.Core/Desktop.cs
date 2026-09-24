@@ -54,14 +54,21 @@ public static class PerchPlanner
             }
         }
 
+        // Windows arrive topmost first. Walk down the pet's centre column: the first perchable top within snap distance
+        // wins; a window covering the drop point (bottom centre) hides everything behind it.
         var center = x + size / 2;
+        var bottom = y + size;
         foreach (var window in windows)
         {
             var b = window.Bounds;
-            if (!Perchable(window, wa, size) || center < b.Left || center > b.Right) continue;
-            var px = Math.Clamp(x, b.Left, b.Right - size);
-            Consider(Math.Abs(y + size - b.Top), new Perch(PerchKind.WindowTop, px, b.Top - size, window.Handle, px - b.Left));
-            break;   // windows arrive topmost first: only the frontmost window under the pet counts
+            if (center < b.Left || center > b.Right) continue;
+            if (Perchable(window, wa, size) && Math.Abs(bottom - b.Top) <= SnapDistance)
+            {
+                var px = Math.Clamp(x, b.Left, b.Right - size);
+                Consider(Math.Abs(bottom - b.Top), new Perch(PerchKind.WindowTop, px, b.Top - size, window.Handle, px - b.Left));
+                break;
+            }
+            if (b.Contains(center, bottom)) break;
         }
         Consider(wa.Bottom - (y + size), new Perch(PerchKind.Floor, x, wa.Bottom - size));
         Consider(x - wa.Left, new Perch(PerchKind.WallLeft, wa.Left, y));
