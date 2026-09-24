@@ -96,7 +96,8 @@ public sealed class Brain(
                 outcome = BrainOutcome.CutOff;
             }
 
-            conversation.Add(userTurn, answer.Length == 0 ? "(no answer)" : answer);
+            if (answer.Length == 0) answer = "(no answer)";
+            conversation.Add(userTurn, answer);
             chatLog?.Append(text, answer);
             var notice = spend.TakeWarning() ? $"Heads up: that's 80% of this month's ${spend.Cap:0.##} budget." : null;
             return new BrainReply(outcome, answer, notice);

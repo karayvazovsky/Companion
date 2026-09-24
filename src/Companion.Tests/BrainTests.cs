@@ -1,4 +1,3 @@
-using System.IO;
 using Companion.Core;
 using Xunit;
 
@@ -193,11 +192,12 @@ public class BrainTests
     {
         using var rig = new Rig();
         rig.Claude.Behavior = (_, _) => new TurnResult("   ", TurnStop.EndTurn, new UsageTotals(10, 1, 0, 0, 0));
-        await rig.Brain.AskAsync("one", rig.Listener);
+        var reply = await rig.Brain.AskAsync("one", rig.Listener);
         rig.Claude.Behavior = (_, _) => new TurnResult("ok", TurnStop.EndTurn, new UsageTotals(10, 1, 0, 0, 0));
 
         await rig.Brain.AskAsync("two", rig.Listener);
 
+        Assert.Equal("(no answer)", reply.Text);
         Assert.Equal("(no answer)", rig.Claude.Requests[1].Messages[1].Text);
     }
 
