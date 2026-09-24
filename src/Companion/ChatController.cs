@@ -15,7 +15,9 @@ public sealed class ChatController : IBrainListener
     private readonly Dispatcher _ui;
     private readonly DispatcherTimer _renderTimer;
     private readonly DispatcherTimer _slowTimer;
+    private readonly DispatcherTimer _stallTimer;
     private readonly StringBuilder _answer = new();
+    private CancellationTokenSource? _turnCts;
     private string? _question;
     private string? _notice;
     private bool _dirty;
@@ -38,10 +40,21 @@ public sealed class ChatController : IBrainListener
             _slowTimer.Stop();
             _bubble.SetStatus("hmm, one sec…");
         };
+        _stallTimer = new DispatcherTimer(DispatcherPriority.Normal, _ui) { Interval = StallTimeout };
+        _stallTimer.Tick += (_, _) =>
+        {
+            _stallTimer.Stop();
+            if (_turnCts is null) return;
+            _log.Info($"No progress for {StallTimeout.TotalSeconds:0} s; cancelling the turn.");
+            _turnCts.Cancel();
+        };
         bubble.Submitted += OnSubmitted;
         bubble.ThinkHarderClicked += OnThinkHarder;
         bubble.NewChatClicked += OnNewChat;
     }
+
+    /// <summary>A turn with no stream progress for this long is cancelled.</summary>
+    public static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(90);
 
     public event Action? OnboardingCompleted;
 
@@ -96,7 +109,7 @@ public sealed class ChatController : IBrainListener
             await SubmitOnboardingAsync(flow, text);
             return;
         }
-        await RunAsync(text, (brain, listener) => brain.AskAsync(text, listener));
+        await RunAsync(text, (brain, listener, ct) => brain.AskAsync(text, listener, ct));
     }
 
     private async Task SubmitOnboardingAsync(OnboardingFlow flow, string text)
@@ -131,10 +144,16 @@ public sealed class ChatController : IBrainListener
     }
 
     private async void OnThinkHarder() =>
-        await RunAsync("🧠 Think harder", (brain, listener) => brain.ThinkHarderAsync(listener));
+        await RunAsync("🧠 Think harder", (brain, listener, ct) => brain.ThinkHarderAsync(listener, ct));
 
     private void OnNewChat()
     {
+        if (_turnCts is not null)
+        {
+            // While a turn runs the button reads "Stop".
+            _turnCts.Cancel();
+            return;
+        }
         _brain()?.NewChat();
         _answer.Clear();
         _question = null;
@@ -145,7 +164,7 @@ public sealed class ChatController : IBrainListener
         _bubble.FocusInput();
     }
 
-    private async Task RunAsync(string question, Func<Brain, IBrainListener, Task<BrainReply>> call)
+    private async Task RunAsync(string question, Func<Brain, IBrainListener, CancellationToken, Task<BrainReply>> call)
     {
         var brain = _brain();
         if (brain is null)
@@ -162,10 +181,12 @@ public sealed class ChatController : IBrainListener
         _canThinkHarder = false;
         _bubble.SetBusy(true);
         _renderTimer.Start();
+        _turnCts = new CancellationTokenSource();
+        _stallTimer.Start();
         BrainReply reply;
         try
         {
-            reply = await call(brain, this);
+            reply = await call(brain, this, _turnCts.Token);
         }
         catch (Exception ex)
         {
@@ -175,6 +196,9 @@ public sealed class ChatController : IBrainListener
         finally
         {
             _slowTimer.Stop();
+            _stallTimer.Stop();
+            _turnCts.Dispose();
+            _turnCts = null;
             _renderTimer.Stop();
             _bubble.SetBusy(false);
             _bubble.SetStatus(null);
@@ -204,6 +228,7 @@ public sealed class ChatController : IBrainListener
         _pet.Refresh();
         _bubble.SetStatus("thinking…");
         _slowTimer.Start();
+        RestartStallWatch();
     });
 
     public void OnFirstText() => _ui.InvokeAsync(() =>
@@ -212,13 +237,27 @@ public sealed class ChatController : IBrainListener
         _pet.Refresh();
         _slowTimer.Stop();
         _bubble.SetStatus(null);
+        RestartStallWatch();
     });
 
     public void OnText(string delta) => _ui.InvokeAsync(() =>
     {
         _answer.Append(delta);
         _dirty = true;
+        RestartStallWatch();
     });
 
-    public void OnStatus(string status) => _ui.InvokeAsync(() => _bubble.SetStatus(status));
+    public void OnStatus(string status) => _ui.InvokeAsync(() =>
+    {
+        _bubble.SetStatus(status);
+        RestartStallWatch();
+    });
+
+    /// <summary>Any sign of life from the stream pushes the stall watchdog back. UI thread only.</summary>
+    private void RestartStallWatch()
+    {
+        if (_turnCts is null) return;
+        _stallTimer.Stop();
+        _stallTimer.Start();
+    }
 }

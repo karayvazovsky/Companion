@@ -31,11 +31,13 @@ public partial class ChatBubble : Window
         ThinkHarderButton.IsEnabled = thinkHarderEnabled;
     }
 
+    /// <summary>While busy the input is locked and "New chat" becomes "Stop" (it stays clickable).</summary>
     public void SetBusy(bool busy)
     {
         Input.IsEnabled = !busy;
         SecretInput.IsEnabled = !busy;
-        NewChatButton.IsEnabled = !busy;
+        NewChatButton.Content = busy ? "Stop" : "New chat";
+        NewChatButton.ToolTip = busy ? "Stop this answer" : null;
         if (busy) ThinkHarderButton.IsEnabled = false;
     }
 
