@@ -13,6 +13,9 @@ public sealed class MemoryStore
 
     private sealed class Document
     {
+        /// <summary>Number for the next fact id. Never reused, so a forgotten id can't come back as another fact.</summary>
+        public int NextId { get; set; }
+
         public List<Fact> Facts { get; set; } = new();
     }
 
@@ -20,15 +23,20 @@ public sealed class MemoryStore
     private readonly IClock _clock;
     private readonly object _gate = new();
     private readonly Document _doc;
+    private int _version;
 
     public MemoryStore(string path, IClock clock, ILog log)
     {
         _path = path;
         _clock = clock;
         _doc = JsonFile.Load(path, () => new Document(), log, clock);
+        _doc.NextId = Math.Max(_doc.NextId, MaxExistingId() + 1);
     }
 
     public event Action? Changed;
+
+    /// <summary>Increments on every successful Add/Remove/Update (in memory only).</summary>
+    public int Version => Volatile.Read(ref _version);
 
     public IReadOnlyList<Fact> Facts
     {
@@ -46,9 +54,10 @@ public sealed class MemoryStore
             if (existing is not null) return new MemoryResult(true, $"Already remembered as {existing.Id}.", existing);
             if (_doc.Facts.Count >= SoftLimit)
                 return new MemoryResult(false, $"Memory is full ({SoftLimit} facts). Merge or forget older facts first.", null);
-            fact = new Fact(NextId(), text, _clock.Now);
+            fact = new Fact(FormatId(_doc.NextId++), text, _clock.Now);
             _doc.Facts.Add(fact);
             JsonFile.Save(_path, _doc);
+            Interlocked.Increment(ref _version);
         }
         Changed?.Invoke();
         return new MemoryResult(true, $"Saved as {fact.Id}.", fact);
@@ -60,6 +69,7 @@ public sealed class MemoryStore
         {
             if (_doc.Facts.RemoveAll(f => f.Id == id) == 0) return false;
             JsonFile.Save(_path, _doc);
+            Interlocked.Increment(ref _version);
         }
         Changed?.Invoke();
         return true;
@@ -75,12 +85,15 @@ public sealed class MemoryStore
             if (index < 0) return false;
             _doc.Facts[index] = _doc.Facts[index] with { Text = text };
             JsonFile.Save(_path, _doc);
+            Interlocked.Increment(ref _version);
         }
         Changed?.Invoke();
         return true;
     }
 
-    private string NextId()
+    private static string FormatId(int n) => $"f_{n.ToString("00", CultureInfo.InvariantCulture)}";
+
+    private int MaxExistingId()
     {
         var max = 0;
         foreach (var fact in _doc.Facts)
@@ -91,6 +104,6 @@ public sealed class MemoryStore
                 max = Math.Max(max, n);
             }
         }
-        return $"f_{(max + 1).ToString("00", CultureInfo.InvariantCulture)}";
+        return max;
     }
 }

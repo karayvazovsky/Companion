@@ -164,6 +164,7 @@ public sealed class AppHost : IDisposable
             ? null
             : new Brain(new AnthropicClaudeClient(key), _conversation,
                 () => SystemPrompt.Build(PetName, _petStore.Current.UserName ?? "my human", _memory.Facts),
+                () => _memory.Version,
                 _tools, _spend, _settings, _chatLog, _log);
     }
 

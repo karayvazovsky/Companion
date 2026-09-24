@@ -21,6 +21,7 @@ public sealed class Brain(
     IClaudeClient client,
     Conversation conversation,
     Func<string> systemPrompt,
+    Func<int> systemPromptVersion,
     ToolRegistry tools,
     SpendTracker spend,
     SettingsStore settings,
@@ -55,7 +56,7 @@ public sealed class Brain(
         Busy = true;
         try
         {
-            conversation.BeginTurn(systemPrompt);
+            conversation.BeginTurn(systemPrompt, systemPromptVersion());
             var userTurn = conversation.FormatUserTurn(text);
             var messages = new List<HistoryMessage>();
             foreach (var exchange in conversation.Exchanges)

@@ -15,13 +15,28 @@ public class ConversationTests
         var builds = 0;
         string Build() { builds++; return $"prompt {builds}"; }
 
-        conversation.BeginTurn(Build);
+        conversation.BeginTurn(Build, promptVersion: 3);
         conversation.Add("u1", "a1");
         clock.Advance(TimeSpan.FromMinutes(5));
-        conversation.BeginTurn(Build);
+        conversation.BeginTurn(Build, promptVersion: 3);
 
         Assert.Equal(1, builds);
         Assert.Equal("prompt 1", conversation.SystemPrompt);
+    }
+
+    [Fact]
+    public void System_prompt_is_rebuilt_when_its_version_changes_and_history_is_kept()
+    {
+        var clock = FakeClock.At(2026, 9, 24, 14);
+        var conversation = new Conversation(clock);
+        var builds = 0;
+        conversation.BeginTurn(() => $"prompt {++builds}", promptVersion: 1);
+        conversation.Add("u1", "a1");
+
+        conversation.BeginTurn(() => $"prompt {++builds}", promptVersion: 2);
+
+        Assert.Equal("prompt 2", conversation.SystemPrompt);
+        Assert.Equal("u1", Assert.Single(conversation.Exchanges).User);
     }
 
     [Fact]
@@ -30,11 +45,11 @@ public class ConversationTests
         var clock = FakeClock.At(2026, 9, 24, 14);
         var conversation = new Conversation(clock);
         var builds = 0;
-        conversation.BeginTurn(() => $"prompt {++builds}");
+        conversation.BeginTurn(() => $"prompt {++builds}", promptVersion: 0);
         conversation.Add("u1", "a1");
 
         clock.Advance(TimeSpan.FromMinutes(30));
-        conversation.BeginTurn(() => $"prompt {++builds}");
+        conversation.BeginTurn(() => $"prompt {++builds}", promptVersion: 0);
 
         Assert.Empty(conversation.Exchanges);
         Assert.Equal("prompt 2", conversation.SystemPrompt);
@@ -62,7 +77,7 @@ public class ConversationTests
     public void Reset_clears_everything()
     {
         var conversation = new Conversation(FakeClock.At(2026, 9, 24, 14));
-        conversation.BeginTurn(() => "p");
+        conversation.BeginTurn(() => "p", promptVersion: 0);
         conversation.Add("u", "a");
 
         conversation.Reset();

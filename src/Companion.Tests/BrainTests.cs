@@ -45,6 +45,7 @@ public class BrainTests
         public MemoryStore Memory { get; }
         public SpendTracker Spend { get; }
         public Brain Brain { get; }
+        public int PromptBuilds { get; private set; }
 
         public Rig()
         {
@@ -54,7 +55,9 @@ public class BrainTests
             var tools = new ToolRegistry();
             tools.Register(new RememberTool(Memory));
             tools.Register(new ForgetTool(Memory));
-            Brain = new Brain(Claude, new Conversation(Clock), () => SystemPrompt.Build("Pip", "Karco", Memory.Facts),
+            Brain = new Brain(Claude, new Conversation(Clock),
+                () => { PromptBuilds++; return SystemPrompt.Build("Pip", "Karco", Memory.Facts); },
+                () => Memory.Version,
                 tools, Spend, Settings, new ChatLog(Tmp.PathOf("logs"), Clock), NullLog.Instance);
         }
 
@@ -98,6 +101,33 @@ public class BrainTests
         Assert.Equal("Hi there!", messages[1].Text);
         Assert.EndsWith("two", messages[2].Text);
         Assert.Equal(rig.Claude.Requests[0].SystemPrompt, rig.Claude.Requests[1].SystemPrompt);
+        Assert.Equal(1, rig.PromptBuilds);
+    }
+
+    [Fact]
+    public async Task A_remembered_fact_is_in_the_next_prompt_of_the_same_chat_so_it_can_be_forgotten()
+    {
+        using var rig = new Rig();
+        rig.Claude.Behavior = (_, handler) =>
+        {
+            handler.ExecuteTool("remember", ToolInput.From(new { fact = "Likes teal" }));
+            return new TurnResult("Got it!", TurnStop.EndTurn, new UsageTotals(10, 10, 0, 0, 0));
+        };
+        await rig.Brain.AskAsync("remember I like teal", rig.Listener);
+        rig.Claude.Behavior = (_, handler) =>
+        {
+            var outcome = handler.ExecuteTool("forget", ToolInput.From(new { fact_id = "f_01" }));
+            Assert.False(outcome.IsError);
+            return new TurnResult("Forgotten.", TurnStop.EndTurn, new UsageTotals(10, 10, 0, 0, 0));
+        };
+
+        await rig.Brain.AskAsync("forget that", rig.Listener);
+
+        Assert.DoesNotContain("[f_01]", rig.Claude.Requests[0].SystemPrompt);
+        Assert.Contains("- [f_01] Likes teal", rig.Claude.Requests[1].SystemPrompt);
+        Assert.Equal(3, rig.Claude.Requests[1].Messages.Count);
+        Assert.Empty(rig.Memory.Facts);
+        Assert.Equal(2, rig.PromptBuilds);
     }
 
     [Fact]

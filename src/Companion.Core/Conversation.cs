@@ -5,8 +5,8 @@ namespace Companion.Core;
 public sealed record Exchange(string User, string Assistant);
 
 /// <summary>
-/// Text-only history of the current chat. The system prompt is frozen for the whole conversation
-/// so the cached prefix stays byte-identical between turns.
+/// Text-only history of the current chat. The system prompt stays frozen between turns so the cached
+/// prefix is byte-identical, unless its inputs (the remembered facts) changed.
 /// </summary>
 public sealed class Conversation(IClock clock)
 {
@@ -15,16 +15,25 @@ public sealed class Conversation(IClock clock)
 
     private readonly List<Exchange> _exchanges = new();
     private DateTimeOffset _lastActivity;
+    private int _promptVersion;
 
     public string? SystemPrompt { get; private set; }
 
     public IReadOnlyList<Exchange> Exchanges => _exchanges;
 
-    public void BeginTurn(Func<string> buildSystemPrompt)
+    /// <summary>
+    /// Starts a turn. The prompt is rebuilt only when the chat is new or <paramref name="promptVersion"/>
+    /// (e.g. the memory version) differs from the one the current prompt was built with; history is kept.
+    /// </summary>
+    public void BeginTurn(Func<string> buildSystemPrompt, int promptVersion)
     {
         var now = clock.Now;
         if (SystemPrompt is not null && now - _lastActivity >= ResetAfter) Reset();
-        SystemPrompt ??= buildSystemPrompt();
+        if (SystemPrompt is null || promptVersion != _promptVersion)
+        {
+            SystemPrompt = buildSystemPrompt();
+            _promptVersion = promptVersion;
+        }
         _lastActivity = now;
     }
 

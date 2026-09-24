@@ -71,6 +71,56 @@ public class MemoryStoreTests
         Assert.Equal(2, changes);
         Assert.Equal("f_03", store.Add("c").Fact!.Id);
     }
+
+    [Fact]
+    public void Ids_never_repeat_after_deleting_the_highest_fact_even_across_reload()
+    {
+        using var tmp = new TempDir();
+        var store = NewStore(tmp);
+        store.Add("a");
+        store.Add("b");
+
+        Assert.True(store.Remove("f_02"));
+        Assert.Equal("f_03", store.Add("c").Fact!.Id);
+        Assert.True(store.Remove("f_03"));
+
+        var reloaded = NewStore(tmp);
+        Assert.Equal("f_04", reloaded.Add("d").Fact!.Id);
+    }
+
+    [Fact]
+    public void A_file_without_a_counter_continues_after_the_highest_id()
+    {
+        using var tmp = new TempDir();
+        System.IO.File.WriteAllText(tmp.PathOf("memory.json"),
+            """{ "facts": [ { "id": "f_01", "text": "a", "created": "2026-09-01T00:00:00+00:00" }, { "id": "f_05", "text": "b", "created": "2026-09-01T00:00:00+00:00" } ] }""");
+
+        var store = NewStore(tmp);
+
+        Assert.Equal("f_06", store.Add("c").Fact!.Id);
+        Assert.Contains("\"nextId\": 7", System.IO.File.ReadAllText(tmp.PathOf("memory.json")));
+    }
+
+    [Fact]
+    public void Version_changes_only_on_successful_edits()
+    {
+        using var tmp = new TempDir();
+        var store = NewStore(tmp);
+        var v0 = store.Version;
+
+        store.Add("a");
+        var v1 = store.Version;
+        store.Add("A");        // duplicate: no change
+        store.Remove("f_99");  // missing: no change
+        store.Update("f_99", "x");
+        Assert.Equal(v1, store.Version);
+
+        store.Update("f_01", "a2");
+        var v2 = store.Version;
+        store.Remove("f_01");
+
+        Assert.True(v0 < v1 && v1 < v2 && v2 < store.Version);
+    }
 }
 
 public class PetStateStoreTests

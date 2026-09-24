@@ -32,7 +32,7 @@ tools.Register(new RememberTool(memory));
 tools.Register(new ForgetTool(memory));
 var spend = new SpendTracker(settings, clock);
 var brain = new Brain(client, new Conversation(clock), () => SystemPrompt.Build("Pip", "Tester", memory.Facts),
-    tools, spend, settings, null, log);
+    () => memory.Version, tools, spend, settings, null, log);
 
 string[] questions =
 [
