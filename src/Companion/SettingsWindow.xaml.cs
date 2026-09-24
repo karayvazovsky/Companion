@@ -102,7 +102,9 @@ public partial class SettingsWindow : Window
             MessageBox.Show(this, "The hotkey must look like Ctrl+Alt+Space: at least one of Ctrl/Alt/Shift/Win plus one key.", "Companion");
             return;
         }
-        if (!decimal.TryParse(CapBox.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out var cap) || cap < 0)
+        // Accept both "12.50" and "12,50" whatever the Windows number format is.
+        var capText = CapBox.Text.Trim().Replace(',', '.');
+        if (!decimal.TryParse(capText, NumberStyles.Number, CultureInfo.InvariantCulture, out var cap) || cap < 0)
         {
             MessageBox.Show(this, "The monthly cap must be a number like 30 or 12.50.", "Companion");
             return;
