@@ -51,7 +51,7 @@ public sealed class FileLog : ILog
         var line = $"{now.ToString("HH:mm:ss", CultureInfo.InvariantCulture)} {level} {message}{Environment.NewLine}";
         lock (_gate)
         {
-            try { File.AppendAllText(path, line); } catch (IOException) { }
+            try { File.AppendAllText(path, line); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 }

@@ -21,9 +21,12 @@ public sealed class DpapiProtector : ISecretProtector
 
 public sealed class SecretStore(string path, ISecretProtector protector, ILog log)
 {
-    public bool HasKey => File.Exists(path);
+    /// <summary>True only when a key file exists and decrypts; an unreadable key counts as missing.</summary>
+    public bool HasKey => Load(logFailure: false) is not null;
 
-    public string? LoadApiKey()
+    public string? LoadApiKey() => Load(logFailure: true);
+
+    private string? Load(bool logFailure)
     {
         if (!File.Exists(path)) return null;
         try
@@ -32,7 +35,7 @@ public sealed class SecretStore(string path, ISecretProtector protector, ILog lo
         }
         catch (CryptographicException ex)
         {
-            log.Error("Could not decrypt the stored API key.", ex);
+            if (logFailure) log.Error("Could not decrypt the stored API key.", ex);
             return null;
         }
     }

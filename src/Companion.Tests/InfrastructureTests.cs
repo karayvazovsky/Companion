@@ -73,6 +73,18 @@ public class FileLogTests
     }
 
     [Fact]
+    public void Write_never_throws_when_the_log_file_is_inaccessible()
+    {
+        using var tmp = new TempDir();
+        var clock = FakeClock.At(2026, 9, 24, 8);
+        var log = new FileLog(tmp.Root, clock);
+        Directory.CreateDirectory(tmp.PathOf("app-2026-09-24.log")); // appending to a directory: UnauthorizedAccessException
+
+        log.Info("still fine");
+        log.Error("still fine", new InvalidOperationException("bad"));
+    }
+
+    [Fact]
     public void Constructor_tolerates_locked_old_log_files()
     {
         using var tmp = new TempDir();

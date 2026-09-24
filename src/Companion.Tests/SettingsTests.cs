@@ -82,6 +82,16 @@ public class SecretStoreTests
     }
 
     [Fact]
+    public void Garbage_file_counts_as_no_key()
+    {
+        using var tmp = new TempDir();
+        var path = tmp.PathOf("secrets.bin");
+        System.IO.File.WriteAllBytes(path, [1, 2, 3, 4]);
+
+        Assert.False(new SecretStore(path, new DpapiProtector(), NullLog.Instance).HasKey);
+    }
+
+    [Fact]
     public void Clear_removes_the_key()
     {
         using var tmp = new TempDir();
