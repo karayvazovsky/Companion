@@ -52,6 +52,21 @@ public class OnboardingTests
         Assert.True(OnboardingFlow.IsComplete(rig.Pet, rig.Secrets));
     }
 
+    [Fact]
+    public void Refresh_notices_pieces_saved_behind_the_flows_back()
+    {
+        using var rig = new Rig();
+        rig.Pet.Current.PetName = "Pip";
+        rig.Pet.Current.UserName = "Karco";
+        var flow = rig.Flow();
+        Assert.Equal(OnboardingStep.ApiKey, flow.Step);
+
+        rig.Secrets.SaveApiKey("sk-ant-from-settings");
+
+        Assert.Equal(OnboardingStep.Done, flow.Refresh());
+        Assert.Equal(OnboardingStep.Done, flow.Step);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("A name that is far too long")]

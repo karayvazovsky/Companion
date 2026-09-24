@@ -56,6 +56,13 @@ public sealed class ChatController : IBrainListener
     public void Open()
     {
         _bubble.SetTitle(_petName());
+        if (_onboarding is not null && _onboarding.Refresh() == OnboardingStep.Done)
+        {
+            // The missing piece (usually the key) was saved elsewhere, e.g. in Settings.
+            _onboarding = null;
+            _bubble.SetSecretMode(false);
+            OnboardingCompleted?.Invoke();
+        }
         var chatting = _onboarding is null;
         _bubble.SetConversationButtons(chatting, chatting && _canThinkHarder && !(_brain()?.Busy ?? false));
         if (chatting && _answer.Length == 0 && _question is null)

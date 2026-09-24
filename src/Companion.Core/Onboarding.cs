@@ -23,6 +23,9 @@ public sealed class OnboardingFlow
 
     public OnboardingStep Step { get; private set; }
 
+    /// <summary>Re-derives the step from the stores, e.g. after the key was saved in Settings.</summary>
+    public OnboardingStep Refresh() => Step = NextStep();
+
     public static bool IsComplete(PetStateStore pet, SecretStore secrets) =>
         pet.Current.PetName is not null && pet.Current.UserName is not null && secrets.HasKey;
 
