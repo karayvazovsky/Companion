@@ -19,9 +19,9 @@ public class DefaultSkinTests
         var frameCount = width / skin.FrameSize * (height / skin.FrameSize);
 
         Assert.Equal(64, width);
-        Assert.Equal(128, height);
+        Assert.Equal(160, height);
         Assert.All(skin.Animations.Values.SelectMany(a => a.Frames), f => Assert.InRange(f, 0, frameCount - 1));
-        foreach (var name in new[] { "idle", "walk", "happy", "bored", "sleepy", "sleep", "thinking", "talking", "egg" })
+        foreach (var name in new[] { "idle", "walk", "happy", "bored", "sleepy", "sleep", "thinking", "talking", "egg", "hang", "poof" })
             Assert.True(skin.Animations.ContainsKey(name), $"missing animation {name}");
     }
 }

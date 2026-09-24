@@ -9,6 +9,8 @@
     "sleep":    { "fps": 2, "loop": true,  "frames": [20, 21] },
     "thinking": { "fps": 4, "loop": true,  "frames": [24, 25, 26] },
     "talking":  { "fps": 8, "loop": true,  "frames": [28, 29] },
-    "egg":      { "fps": 2, "loop": true,  "frames": [30, 30, 31, 30] }
+    "egg":      { "fps": 2, "loop": true,  "frames": [30, 30, 31, 30] },
+    "hang":     { "fps": 2, "loop": true,  "frames": [32, 32, 32, 33] },
+    "poof":     { "fps": 8, "loop": false, "frames": [34, 35, 36] }
   }
 }

@@ -110,11 +110,13 @@ static class Frames
         ['G'] = 0xFFBFBFBF, // thinking dots
         ['E'] = 0xFFF4E9D0, // egg shell
         ['S'] = 0xFFD8B98A, // egg spots
+        ['W'] = 0xFFF2F2F2, // poof white
+        ['V'] = 0xFFC9C9C9, // poof shade
     };
 
     public static Grid[] Build()
     {
-        var f = new Grid[32];
+        var f = new Grid[40];
         f[0] = Creature(0, EyeShape.Open, 0, Legs.Stand);
         f[1] = Creature(1, EyeShape.Open, 0, Legs.Stand);
         f[2] = Creature(0, EyeShape.Closed, 0, Legs.Stand);
@@ -147,8 +149,74 @@ static class Frames
         f[29] = f[0];
         f[30] = new Grid().Stamp(Egg, 0, 0);
         f[31] = f[30].Shifted(1);
+        f[32] = Hang(blink: false);
+        f[33] = Hang(blink: true);
+        f[34] = new Grid().Stamp(Poof0, 0, 0);
+        f[35] = new Grid().Stamp(Poof1, 0, 0);
+        f[36] = new Grid().Stamp(Poof2, 0, 0);
+        f[37] = f[32];
+        f[38] = f[33];
+        f[39] = f[36];
         return f;
     }
+
+    /// <summary>Hanging by both arms from an edge above; rotated by the app for walls.</summary>
+    private static Grid Hang(bool blink)
+    {
+        var g = new Grid();
+        foreach (var x in new[] { 3, 12 }) { g.Set(x, 0, 'O'); g.Set(x, 1, 'O'); }
+        for (var y = 2; y <= 8; y++) g.Row(y, 3, 12, 'O');
+        g.Row(9, 3, 12, 'D');
+        foreach (var x in new[] { 5, 10 })
+        {
+            if (blink) { g.Set(x - 1, 5, 'K'); g.Set(x, 5, 'K'); }
+            else { g.Set(x, 4, 'K'); g.Set(x, 5, 'K'); }
+        }
+        for (var y = 10; y <= 12; y++)
+            foreach (var x in new[] { 4, 6, 9, 11 })
+                g.Set(x, y, 'O');
+        return g;
+    }
+
+    private static readonly string[] Poof0 =
+    [
+        "", "", "", "", "",
+        "......WWW",
+        ".....WWWWW",
+        "....WWWVWWW",
+        "....WWWWWWW",
+        ".....WWVWW",
+        "......WWW",
+    ];
+
+    private static readonly string[] Poof1 =
+    [
+        "", "",
+        "....WW...WW",
+        "...WWWW.WWWW",
+        "..WWWWWWWWWWW",
+        ".WWWWWVWWWWWWW",
+        ".WWWWWWWWWVWWW",
+        "..WWWVWWWWWWW",
+        "..WWWWWWWWWWW",
+        "...WWWW.WWWW",
+        "....WW...WW",
+    ];
+
+    private static readonly string[] Poof2 =
+    [
+        "",
+        "..W.......W",
+        "",
+        ".....W.....W",
+        "W",
+        "...........W",
+        "..W.....W",
+        "",
+        "......W......W",
+        "",
+        ".W........W",
+    ];
 
     /// <param name="bob">Vertical offset of the body: -1 jump, 0 normal, 1 squat.</param>
     /// <param name="look">Horizontal eye offset: -1 left, 0 centre, 1 right.</param>
