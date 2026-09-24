@@ -26,6 +26,7 @@ public sealed class AppHost : IDisposable
     private readonly DispatcherTimer _tooltipTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private Brain? _brain;
     private SettingsWindow? _settingsWindow;
+    private bool _rebuildPending;
 
     public AppHost(AppPaths paths, IClock clock, ILog log)
     {
@@ -58,7 +59,7 @@ public sealed class AppHost : IDisposable
         _hotkey.Pressed += OnChatRequested;
         _chat.OnboardingCompleted += () => { RebuildBrain(); UpdateTooltip(); };
         _bubble.IsVisibleChanged += (_, e) => { if (e.NewValue is false) MemoryTrim.Now(); };
-        _tooltipTimer.Tick += (_, _) => UpdateTooltip();
+        _tooltipTimer.Tick += (_, _) => { if (_rebuildPending) RebuildBrain(); UpdateTooltip(); };
         RebuildBrain();
     }
 
@@ -152,7 +153,12 @@ public sealed class AppHost : IDisposable
 
     private void RebuildBrain()
     {
-        if (_brain is { Busy: true }) return;
+        if (_brain is { Busy: true })
+        {
+            _rebuildPending = true;
+            return;
+        }
+        _rebuildPending = false;
         var key = _secrets.LoadApiKey();
         _brain = key is null
             ? null
