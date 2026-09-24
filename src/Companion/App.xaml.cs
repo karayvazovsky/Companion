@@ -38,9 +38,22 @@ public partial class App : Application
             args.SetObserved();
         };
 
-        _host = new AppHost(paths, clock, log);
-        _host.QuitRequested += Shutdown;
-        _host.Start();
+        try
+        {
+            _host = new AppHost(paths, clock, log);
+            _host.QuitRequested += Shutdown;
+            _host.Start();
+        }
+        catch (Exception ex)
+        {
+            // Never linger as a hidden process that holds the single-instance mutex.
+            log.Error("Startup failed.", ex);
+            try { _host?.Dispose(); } catch (Exception disposeError) { log.Error("Cleanup after the failed start failed.", disposeError); }
+            _host = null;
+            MessageBox.Show($"Companion couldn't start: {ex.Message}. Details are in data\\logs.", "Companion",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown();
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
