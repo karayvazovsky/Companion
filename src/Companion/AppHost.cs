@@ -4,7 +4,7 @@ using Companion.Core;
 
 namespace Companion;
 
-/// <summary>Builds and wires everything. Settings and onboarding arrive in Task 19.</summary>
+/// <summary>Composition root: builds every service once and wires events between them.</summary>
 public sealed class AppHost : IDisposable
 {
     private readonly ILog _log;
@@ -25,6 +25,7 @@ public sealed class AppHost : IDisposable
     private readonly ChatController _chat;
     private readonly DispatcherTimer _tooltipTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private Brain? _brain;
+    private SettingsWindow? _settingsWindow;
 
     public AppHost(AppPaths paths, IClock clock, ILog log)
     {
@@ -55,6 +56,7 @@ public sealed class AppHost : IDisposable
         _tray.SettingsClicked += OpenSettings;
         _tray.QuitClicked += () => QuitRequested?.Invoke();
         _hotkey.Pressed += OnChatRequested;
+        _chat.OnboardingCompleted += () => { RebuildBrain(); UpdateTooltip(); };
         _bubble.IsVisibleChanged += (_, e) => { if (e.NewValue is false) MemoryTrim.Now(); };
         _tooltipTimer.Tick += (_, _) => UpdateTooltip();
         RebuildBrain();
@@ -82,6 +84,7 @@ public sealed class AppHost : IDisposable
     public void Dispose()
     {
         _tooltipTimer.Stop();
+        _settingsWindow?.Close();
         _hotkey.Dispose();
         _bubble.Close();
         _pet.Dispose();
@@ -94,19 +97,58 @@ public sealed class AppHost : IDisposable
     {
         _pet.Life.Hatch();
         _pet.Refresh();
+        if (!OnboardingFlow.IsComplete(_petStore, _secrets)) _chat.StartOnboarding(CreateOnboarding());
     }
 
     private void OnChatRequested()
     {
-        if (!_petStore.Current.Hatched)
-        {
-            Hatch();
-            return;
-        }
-        _chat.Toggle();
+        if (!_petStore.Current.Hatched) Hatch();
+        else if (!OnboardingFlow.IsComplete(_petStore, _secrets)) _chat.StartOnboarding(CreateOnboarding());
+        else _chat.Toggle();
     }
 
-    private void OpenSettings() => _line.Say("Settings arrive in the next build step!", _pet.Bounds);
+    private OnboardingFlow CreateOnboarding() =>
+        new(_petStore, _secrets, (key, ct) => new AnthropicClaudeClient(key).ValidateKeyAsync(ct), _settings.Current.Hotkey);
+
+    private void OpenSettings()
+    {
+        if (_settingsWindow is not null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+        _settingsWindow = new SettingsWindow(new SettingsDeps(
+            _settings, _secrets, _memory, _spend,
+            (key, ct) => new AnthropicClaudeClient(key).ValidateKeyAsync(ct),
+            ApplySettings,
+            ResetPet));
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show();
+    }
+
+    private void ApplySettings()
+    {
+        RegisterHotkey();
+        _pet.ApplyScale();
+        try
+        {
+            Autostart.Apply(_settings.Current.StartWithWindows, Environment.ProcessPath!);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            _log.Error("Could not update the autostart entry.", ex);
+        }
+        RebuildBrain();
+        UpdateTooltip();
+    }
+
+    private void ResetPet()
+    {
+        _bubble.Hide();
+        _conversation.Reset();
+        _petStore.Reset();
+        _pet.Refresh();
+    }
 
     private void RebuildBrain()
     {
