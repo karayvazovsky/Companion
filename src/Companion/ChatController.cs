@@ -19,6 +19,7 @@ public sealed class ChatController : IBrainListener
     private string? _question;
     private string? _notice;
     private bool _dirty;
+    private bool _canThinkHarder;
     private OnboardingFlow? _onboarding;
 
     public ChatController(ChatBubble bubble, PetController pet, Func<Brain?> brain, Func<string> petName, ILog log)
@@ -56,7 +57,7 @@ public sealed class ChatController : IBrainListener
     {
         _bubble.SetTitle(_petName());
         var chatting = _onboarding is null;
-        _bubble.SetConversationButtons(chatting, chatting && _answer.Length > 0 && !(_brain()?.Busy ?? false));
+        _bubble.SetConversationButtons(chatting, chatting && _canThinkHarder && !(_brain()?.Busy ?? false));
         if (chatting && _answer.Length == 0 && _question is null)
         {
             _bubble.ShowContent(null, "*wags* What's up?", null);
@@ -70,6 +71,7 @@ public sealed class ChatController : IBrainListener
         _answer.Clear();
         _question = null;
         _notice = null;
+        _canThinkHarder = false;
         ShowOnboardingPrompt(null);
         Open();
     }
@@ -130,6 +132,7 @@ public sealed class ChatController : IBrainListener
         _answer.Clear();
         _question = null;
         _notice = null;
+        _canThinkHarder = false;
         _bubble.ShowContent(null, "*fresh start!* What's up?", null);
         _bubble.SetConversationButtons(true, false);
         _bubble.FocusInput();
@@ -149,6 +152,7 @@ public sealed class ChatController : IBrainListener
         _answer.Clear();
         _notice = null;
         _dirty = true;
+        _canThinkHarder = false;
         _bubble.SetBusy(true);
         _renderTimer.Start();
         BrainReply reply;
@@ -173,7 +177,8 @@ public sealed class ChatController : IBrainListener
         _notice = reply.Notice;
         _dirty = true;
         RenderIfDirty();
-        _bubble.SetConversationButtons(true, reply.Outcome is BrainOutcome.Ok or BrainOutcome.CutOff);
+        _canThinkHarder = reply.Outcome is BrainOutcome.Ok or BrainOutcome.CutOff;
+        _bubble.SetConversationButtons(true, _canThinkHarder);
         _pet.Life.OnChatFinished(reply.Outcome == BrainOutcome.Ok);
         _pet.Refresh();
         _bubble.FocusInput();
