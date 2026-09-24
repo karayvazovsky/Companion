@@ -1,0 +1,11 @@
+<Window x:Class="Companion.LineBubble"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Companion line" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ShowActivated="False" ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight" IsHitTestVisible="False">
+    <Border Margin="6" Padding="10,6" CornerRadius="10" MaxWidth="240"
+            Background="{StaticResource BubbleBackground}" BorderBrush="{StaticResource BubbleBorder}" BorderThickness="1">
+        <TextBlock x:Name="LineText" Foreground="{StaticResource BubbleText}" TextWrapping="Wrap" FontFamily="Segoe UI" FontSize="12" />
+    </Border>
+</Window>
