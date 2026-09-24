@@ -30,7 +30,7 @@ public interface IClaudeClient
     Task ValidateKeyAsync(CancellationToken ct);
 }
 
-public enum ClaudeErrorKind { Network, Unauthorized, Billing, RateLimited, Server, BadRequest, Unknown }
+public enum ClaudeErrorKind { Network, Unauthorized, NoAccess, Billing, RateLimited, Server, BadRequest, Unknown }
 
 public sealed class ClaudeException(ClaudeErrorKind kind, string message, Exception? inner = null) : Exception(message, inner)
 {

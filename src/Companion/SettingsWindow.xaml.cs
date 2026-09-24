@@ -82,7 +82,12 @@ public partial class SettingsWindow : Window
         }
         catch (ClaudeException ex)
         {
-            KeyStatus.Text = ex.Kind == ClaudeErrorKind.Unauthorized ? "That key was rejected." : $"Couldn't check the key right now ({ex.Kind}).";
+            KeyStatus.Text = ex.Kind switch
+            {
+                ClaudeErrorKind.Unauthorized => "That key was rejected.",
+                ClaudeErrorKind.NoAccess => Brain.NoAccessMessage,
+                _ => $"Couldn't check the key right now ({ex.Kind}).",
+            };
         }
         finally
         {

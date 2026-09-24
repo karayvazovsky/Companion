@@ -152,13 +152,15 @@ public sealed class AnthropicClaudeClient : IClaudeClient
         message.Usage.CacheCreationInputTokens ?? 0,
         message.Usage.ServerToolUse?.WebSearchRequests ?? 0);
 
-    private static ClaudeException Map(Exception ex) => ex switch
+    internal static ClaudeException Map(Exception ex) => ex switch
     {
         ClaudeException ce => ce,
         AnthropicUnauthorizedException => new(ClaudeErrorKind.Unauthorized, ex.Message, ex),
+        AnthropicForbiddenException or AnthropicNotFoundException => new(ClaudeErrorKind.NoAccess, ex.Message, ex),
         AnthropicRateLimitException => new(ClaudeErrorKind.RateLimited, ex.Message, ex),
-        Anthropic5xxException => new(ClaudeErrorKind.Server, ex.Message, ex),
+        Anthropic5xxException or AnthropicSseException => new(ClaudeErrorKind.Server, ex.Message, ex),
         AnthropicBadRequestException when ex.Message.Contains("credit balance", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("billing", StringComparison.OrdinalIgnoreCase)
             => new(ClaudeErrorKind.Billing, ex.Message, ex),
         AnthropicBadRequestException => new(ClaudeErrorKind.BadRequest, ex.Message, ex),
         AnthropicIOException or HttpRequestException or OperationCanceledException => new(ClaudeErrorKind.Network, ex.Message, ex),

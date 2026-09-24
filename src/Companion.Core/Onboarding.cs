@@ -61,6 +61,10 @@ public sealed class OnboardingFlow
                 {
                     return "Hmm, that key didn't work. Double-check it and paste it again?";
                 }
+                catch (ClaudeException ex) when (ex.Kind == ClaudeErrorKind.NoAccess)
+                {
+                    return Brain.NoAccessMessage + " Paste a different key?";
+                }
                 catch (ClaudeException ex)
                 {
                     return $"I couldn't check the key right now ({ex.Kind}). Try again in a moment?";

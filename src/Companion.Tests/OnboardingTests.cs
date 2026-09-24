@@ -82,6 +82,9 @@ public class OnboardingTests
         rig.ValidationError = new ClaudeException(ClaudeErrorKind.Network, "offline");
         Assert.Contains("Network", await flow.SubmitAsync("sk-ant-bad", CancellationToken.None));
 
+        rig.ValidationError = new ClaudeException(ClaudeErrorKind.NoAccess, "403");
+        Assert.Contains("can't use claude-opus-5-5", await flow.SubmitAsync("sk-ant-bad", CancellationToken.None));
+
         Assert.Equal(OnboardingStep.ApiKey, flow.Step);
         Assert.False(rig.Secrets.HasKey);
     }

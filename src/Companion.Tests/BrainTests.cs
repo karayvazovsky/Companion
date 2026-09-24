@@ -219,6 +219,7 @@ public class BrainTests
     [InlineData(ClaudeErrorKind.Billing, "credit")]
     [InlineData(ClaudeErrorKind.RateLimited, "busy")]
     [InlineData(ClaudeErrorKind.Server, "trouble")]
+    [InlineData(ClaudeErrorKind.NoAccess, "This API key can't use claude-opus-5-5 (check your console plan/workspace).")]
     public async Task Errors_become_friendly_notices(ClaudeErrorKind kind, string expected)
     {
         using var rig = new Rig();

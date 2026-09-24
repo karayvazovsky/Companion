@@ -29,6 +29,8 @@ public sealed class Brain(
 {
     public const string ThinkHarderPrompt = "Think this through more carefully and give me your best answer.";
 
+    public const string NoAccessMessage = "This API key can't use " + AnthropicClaudeClient.Model + " (check your console plan/workspace).";
+
     public bool Busy { get; private set; }
 
     public UsageTotals LastUsage { get; private set; }
@@ -112,6 +114,7 @@ public sealed class Brain(
     {
         ClaudeErrorKind.Network => "I can't reach the internet right now.",
         ClaudeErrorKind.Unauthorized => "My API key doesn't work. Check it in Settings.",
+        ClaudeErrorKind.NoAccess => NoAccessMessage,
         ClaudeErrorKind.Billing => "Out of API credit. Top up at console.anthropic.com.",
         ClaudeErrorKind.RateLimited => "Claude is busy right now. Try again in a minute.",
         ClaudeErrorKind.Server => "Claude is having trouble right now. Try again in a bit.",
