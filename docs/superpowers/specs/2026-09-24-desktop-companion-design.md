@@ -102,11 +102,11 @@ A small local list per mood (e.g. Bored: "psst… anything I can help with?"). S
 
 ## 6. Skin format
 
-`skins/default/sheet.png` — grid of 32×32 frames. `sheet.json`:
+`skins/default/sheet.png` — grid of square frames, 4 columns wide. The default skin uses 16×16 frames (like the reference creature); custom skins may use any `frameSize` (e.g. 32). `sheet.json`:
 
 ```json
 {
-  "frameSize": 32,
+  "frameSize": 16,
   "animations": {
     "idle":     { "fps": 6, "loop": true,  "frames": [0, 1, 2, 1] },
     "walk":     { "fps": 8, "loop": true,  "frames": [4, 5, 6, 7] },
@@ -115,16 +115,21 @@ A small local list per mood (e.g. Bored: "psst… anything I can help with?"). S
     "sleepy":   { "fps": 4, "loop": true,  "frames": [16, 17] },
     "sleep":    { "fps": 2, "loop": true,  "frames": [20, 21] },
     "thinking": { "fps": 6, "loop": true,  "frames": [24, 25, 26] },
-    "talking":  { "fps": 8, "loop": true,  "frames": [28, 29] }
+    "talking":  { "fps": 8, "loop": true,  "frames": [28, 29] },
+    "egg":      { "fps": 2, "loop": true,  "frames": [30, 31] }
   }
 }
 ```
+
+On screen the frame is scaled with nearest-neighbour by the "pet size" setting: 3×, 4× (default) or 6×, i.e. 48 / 64 / 96 px for the default skin.
 
 Frame index = row-major position in the grid. A skin missing an animation falls back to `idle`. The default skin is a placeholder creature drawn for this project; the user can replace the PNG freely.
 
 ## 7. Brain & Claude integration
 
-- **SDK:** official `Anthropic` NuGet package; streaming Messages API.
+- **SDK:** official `Anthropic` NuGet package (verified against 12.50.0); streaming via the beta Messages endpoint (`client.Beta.Messages.CreateStreaming` + `.Aggregate()`), because the thinking-binding control below is a beta.
+- **Thinking-block safety:** every request sends beta `thinking-binding-controls-2026-08-01` with `thinking.block_binding.prefix_mismatch_behavior = "drop_block"`, so an imperfect echo degrades gracefully instead of returning 400.
+- **History shape:** completed exchanges are stored and replayed as plain text only (user text + final assistant text). Thinking and tool blocks are replayed only inside the tool round that produced them, verbatim. This keeps the history append-only-safe even when the 10-exchange window slides.
 - **Model:** `claude-opus-5-5` for all requests.
   - Everyday: `output_config.effort = "low"`.
   - "🧠 Think harder": appends a new user turn ("Think this through more carefully and give me your best answer.") and sends it with `effort = "high"`. History is never rewritten — Opus 5.5 binds thinking blocks to the conversation, so replacing the earlier answer would break them. The bubble replaces the displayed answer with the new one.
@@ -136,8 +141,8 @@ Frame index = row-major position in the grid. A skin missing an animation falls 
   - `web_search` (server tool, `web_search_20260209`, `max_uses: 3`).
   - `remember(fact: string)` — appends a fact to `memory.json`.
   - `forget(fact_id: string)` — removes a fact.
-  - Client tools use `strict: true` and are validated before running.
-- **Tool loop:** the SDK tool runner (or a manual loop) runs until `stop_reason` is `end_turn`. `refusal` stop reason → pet shows a neutral "can't help with that one" line. `max_tokens` → append "…(cut off)" to the bubble.
+  - Client tool inputs are validated locally before running (the C# SDK's `InputSchema` does not expose `additionalProperties`, so `strict` is not used).
+- **Tool loop:** a manual loop (max 5 rounds) continues on `tool_use` and `pause_turn` until `end_turn`. `refusal` stop reason → pet shows a neutral "can't help with that one" line. `max_tokens` → append "…(cut off)" to the bubble.
 - **Streaming UI:** first `text` delta switches pet from Thinking to Talking; bubble appends deltas as they arrive.
 
 ## 8. Memory
@@ -166,7 +171,7 @@ Frame index = row-major position in the grid. A skin missing an animation falls 
 | No network / connection error | Pet shows "no signal" cloud; bubble: "I can't reach the internet right now." |
 | 401 (bad key) | Bubble explains and offers "Open Settings". |
 | Credit exhausted / billing error | Bubble explains and links to console.anthropic.com. |
-| 429 / 5xx | SDK retries (default 2); bubble shows "hmm, one sec…" during retry; final failure shown plainly. |
+| 429 / 5xx | SDK retries (default 2) internally; if no answer text has arrived after 8 s the bubble shows "hmm, one sec…"; final failure shown plainly. |
 | Local cap reached | See §9. |
 | Corrupt data file | Rename to `*.bad-<timestamp>`, start with defaults, log it. |
 | Skin fails to load | Fall back to a built-in 1-frame placeholder, log it. |
@@ -182,19 +187,19 @@ Errors are logged to `data/logs/app-YYYY-MM-DD.log` (rotating, keep 7 days).
 
 ## 12. Settings
 
-API key · hotkey · everyday effort / think-harder effort · monthly cap · pet size (3×/4×) · start with Windows (off by default) · memory editor (list, edit, delete facts) · "Reset pet".
+API key · hotkey · everyday effort / think-harder effort · monthly cap · pet size (3×/4×/6×) · start with Windows (off by default) · memory editor (list, edit, delete facts) · "Reset pet".
 
 ## 13. Platform & build
 
 - .NET 10 (LTS), WPF, `net10.0-windows`. **Prerequisite:** .NET 10 SDK installed (not currently present on this machine; .NET 8 runtime only).
 - Framework-dependent publish to `app\` (small on disk; uses the shared .NET Desktop Runtime).
 - Git repository at `D:\Claude\Companion`.
-- Projects: `Companion` (WPF app), `Companion.Core` (pure logic: PetLife, meters, MemoryStore, SpendTracker, skin parsing, Brain), `Companion.Tests` (xUnit).
+- Projects: `src/Companion` (WPF app), `src/Companion.Core` (logic: PetLife, meters, MemoryStore, SpendTracker, skin parsing, Brain, Claude client), `src/Companion.Tests` (xUnit), `tools/SkinGen` (renders the placeholder sprite sheet), `tools/Smoke` (real-API smoke test console).
 
 ## 14. Testing
 
 - **Unit tests (xUnit, no network, fake clock):** PetLife transitions and priorities; meter drain/refill; built-in line throttling; skin JSON parsing and fallbacks; MemoryStore round-trip and corrupt-file recovery; SpendTracker math and cap; Brain conversation window, reset timing, tool loop with a fake `IClaudeClient`.
-- **Smoke test (manual trigger, real API, < 1¢):** one question with streaming; one `remember` round-trip.
+- **Smoke test (manual trigger, real API, a few cents):** `tools/Smoke` asks three questions: a `remember` round-trip plus a joke, recall of the remembered fact, and one web search.
 - **Footprint check:** script samples the process's working set and CPU for 2 minutes idle; pass if < 60 MB and < 1% average.
 - **Manual checklist:** animations look right, drag and position persistence, bubble open/close, hotkey, fullscreen pause, sleep/wake on AFK, tray menu, first-run hatch.
 
