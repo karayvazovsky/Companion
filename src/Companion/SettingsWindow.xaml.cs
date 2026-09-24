@@ -22,11 +22,17 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
         _deps = deps;
+        BrainBox.ItemsSource = Enum.GetValues<BrainKind>();
+        EverydayModelBox.ItemsSource = new[] { "claude-sonnet-5", "claude-opus-5-5", "claude-haiku-4-5" };
+        HarderModelBox.ItemsSource = new[] { "claude-sonnet-5", "claude-opus-5-5", "claude-haiku-4-5" };
         EverydayBox.ItemsSource = Enum.GetValues<EffortLevel>();
         HarderBox.ItemsSource = Enum.GetValues<EffortLevel>();
         ScaleBox.ItemsSource = new[] { 3, 4, 6 };
 
         var settings = deps.Settings.Current;
+        BrainBox.SelectedItem = settings.Brain;
+        EverydayModelBox.Text = settings.SubscriptionEverydayModel;
+        HarderModelBox.Text = settings.SubscriptionThinkHarderModel;
         HotkeyBox.Text = settings.Hotkey;
         EverydayBox.SelectedItem = settings.EverydayEffort;
         HarderBox.SelectedItem = settings.ThinkHarderEffort;
@@ -111,6 +117,9 @@ public partial class SettingsWindow : Window
         }
 
         var settings = _deps.Settings.Current;
+        settings.Brain = (BrainKind)BrainBox.SelectedItem;
+        settings.SubscriptionEverydayModel = EverydayModelBox.Text.Trim();
+        settings.SubscriptionThinkHarderModel = HarderModelBox.Text.Trim();
         settings.Hotkey = HotkeyBox.Text.Trim();
         settings.EverydayEffort = (EffortLevel)EverydayBox.SelectedItem;
         settings.ThinkHarderEffort = (EffortLevel)HarderBox.SelectedItem;

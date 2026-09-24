@@ -8,6 +8,7 @@ namespace Companion;
 public sealed class AppHost : IDisposable
 {
     private readonly ILog _log;
+    private readonly AppPaths _paths;
     private readonly SettingsStore _settings;
     private readonly SecretStore _secrets;
     private readonly MemoryStore _memory;
@@ -27,10 +28,12 @@ public sealed class AppHost : IDisposable
     private Brain? _brain;
     private SettingsWindow? _settingsWindow;
     private bool _rebuildPending;
+    private string _noBrainMessage = "";
 
     public AppHost(AppPaths paths, IClock clock, ILog log)
     {
         _log = log;
+        _paths = paths;
         _settings = new SettingsStore(paths.SettingsFile, clock, log);
         _secrets = new SecretStore(paths.SecretsFile, new DpapiProtector(), log);
         _memory = new MemoryStore(paths.MemoryFile, clock, log);
@@ -44,7 +47,7 @@ public sealed class AppHost : IDisposable
         var sheet = LoadSheet(Path.Combine(paths.Skins, "default"));
         _pet = new PetController(new PetWindow(), new PetLife(_petStore.Current, clock, new Random()), sheet, _activity, _settings, _petStore);
         _tray = new TrayIcon(sheet.Frame(0));
-        _chat = new ChatController(_bubble, _pet, () => _brain, () => PetName, log);
+        _chat = new ChatController(_bubble, _pet, () => _brain, () => PetName, () => _noBrainMessage, log);
 
         _pet.EggClicked += Hatch;
         _pet.ChatRequested += OnChatRequested;
@@ -58,6 +61,7 @@ public sealed class AppHost : IDisposable
         _tray.QuitClicked += () => QuitRequested?.Invoke();
         _hotkey.Pressed += OnChatRequested;
         _chat.OnboardingCompleted += () => { RebuildBrain(); UpdateTooltip(); };
+        _chat.TurnFinished += () => { if (_settings.Current.Brain == BrainKind.Subscription) _memory.Reload(); UpdateTooltip(); };
         _bubble.IsVisibleChanged += (_, e) => { if (e.NewValue is false) MemoryTrim.Now(); };
         _tooltipTimer.Tick += (_, _) => { if (_rebuildPending) RebuildBrain(); UpdateTooltip(); };
         RebuildBrain();
@@ -98,18 +102,18 @@ public sealed class AppHost : IDisposable
     {
         _pet.Life.Hatch();
         _pet.Refresh();
-        if (!OnboardingFlow.IsComplete(_petStore, _secrets)) _chat.StartOnboarding(CreateOnboarding());
+        if (!OnboardingFlow.IsComplete(_petStore, _secrets, _settings.Current.Brain)) _chat.StartOnboarding(CreateOnboarding());
     }
 
     private void OnChatRequested()
     {
         if (!_petStore.Current.Hatched) Hatch();
-        else if (!OnboardingFlow.IsComplete(_petStore, _secrets)) _chat.StartOnboarding(CreateOnboarding());
+        else if (!OnboardingFlow.IsComplete(_petStore, _secrets, _settings.Current.Brain)) _chat.StartOnboarding(CreateOnboarding());
         else _chat.Toggle();
     }
 
     private OnboardingFlow CreateOnboarding() =>
-        new(_petStore, _secrets, (key, ct) => new AnthropicClaudeClient(key).ValidateKeyAsync(ct), _settings.Current.Hotkey);
+        new(_petStore, _secrets, (key, ct) => new AnthropicClaudeClient(key).ValidateKeyAsync(ct), _settings.Current.Hotkey, () => _settings.Current.Brain);
 
     private void OpenSettings()
     {
@@ -159,10 +163,31 @@ public sealed class AppHost : IDisposable
             return;
         }
         _rebuildPending = false;
-        var key = _secrets.LoadApiKey();
-        _brain = key is null
+        IClaudeClient? client;
+        if (_settings.Current.Brain == BrainKind.Subscription)
+        {
+            var exe = ClaudeCodeLocator.Find(_settings.Current.ClaudeCodePath);
+            var memoryServer = MemoryServerLocator.Find(_paths, AppContext.BaseDirectory);
+            if (memoryServer is null) _log.Info("Companion.Memory.exe not found; remember/forget are unavailable in subscription mode.");
+            _noBrainMessage = "I can't find Claude Code on this PC. Install it, or switch my **Brain** to API key in Settings.";
+            client = exe is null
+                ? null
+                : new ClaudeCodeClient(new ClaudeCodeOptions(
+                    exe,
+                    _settings.Current.SubscriptionEverydayModel,
+                    _settings.Current.SubscriptionThinkHarderModel,
+                    memoryServer,
+                    _paths.MemoryFile,
+                    _paths.Workspace));
+        }
+        else
+        {
+            _noBrainMessage = "I need an API key before I can think. Right-click me → **Settings**.";
+            client = _secrets.LoadApiKey() is { } key ? new AnthropicClaudeClient(key) : null;
+        }
+        _brain = client is null
             ? null
-            : new Brain(new AnthropicClaudeClient(key), _conversation,
+            : new Brain(client, _conversation,
                 () => SystemPrompt.Build(PetName, _petStore.Current.UserName ?? "my human", _memory.Facts),
                 () => _memory.Version,
                 _tools, _spend, _settings, _chatLog, _log);
@@ -174,8 +199,11 @@ public sealed class AppHost : IDisposable
             _log.Info($"Hotkey '{_settings.Current.Hotkey}' could not be registered (invalid or used by another app).");
     }
 
-    private void UpdateTooltip() =>
-        _tray.SetTooltip($"{PetName} · {_pet.Life.State.ToString().ToLowerInvariant()} · ${_spend.ThisMonth:0.00} this month");
+    private void UpdateTooltip()
+    {
+        var cost = _settings.Current.Brain == BrainKind.Subscription ? "Claude subscription" : $"${_spend.ThisMonth:0.00} this month";
+        _tray.SetTooltip($"{PetName} · {_pet.Life.State.ToString().ToLowerInvariant()} · {cost}");
+    }
 
     private SpriteSheet LoadSheet(string directory)
     {

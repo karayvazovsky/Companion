@@ -13,19 +13,32 @@ if (args.Length == 2 && args[0] == "--save-key")
     return 0;
 }
 
-var key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? secrets.LoadApiKey();
-if (string.IsNullOrWhiteSpace(key))
-{
-    Console.Error.WriteLine("No API key. Run: dotnet run --project tools/Smoke -- --save-key sk-ant-...");
-    return 1;
-}
-
-var client = new AnthropicClaudeClient(key);
-await client.ValidateKeyAsync(CancellationToken.None);
-Console.WriteLine("Key OK.");
-
 var temp = Path.Combine(Path.GetTempPath(), "companion-smoke-" + Guid.NewGuid().ToString("N"));
 var settings = new SettingsStore(Path.Combine(temp, "settings.json"), clock, log);
+
+IClaudeClient client;
+if (args.Contains("--subscription"))
+{
+    var exe = ClaudeCodeLocator.Find(null) ?? throw new InvalidOperationException("Claude Code not found.");
+    var server = MemoryServerLocator.Find(paths, AppContext.BaseDirectory);
+    client = new ClaudeCodeClient(new ClaudeCodeOptions(exe, "claude-haiku-4-5", "claude-sonnet-5", server,
+        Path.Combine(temp, "memory.json"), Path.Combine(temp, "workspace")));
+}
+else
+{
+    var key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? secrets.LoadApiKey();
+    if (string.IsNullOrWhiteSpace(key))
+    {
+        Console.Error.WriteLine("No API key. Run: dotnet run --project tools/Smoke -- --save-key sk-ant-...");
+        return 1;
+    }
+
+    var anthropicClient = new AnthropicClaudeClient(key);
+    await anthropicClient.ValidateKeyAsync(CancellationToken.None);
+    Console.WriteLine("Key OK.");
+    client = anthropicClient;
+}
+
 var memory = new MemoryStore(Path.Combine(temp, "memory.json"), clock, log);
 var tools = new ToolRegistry();
 tools.Register(new RememberTool(memory));
@@ -46,6 +59,7 @@ foreach (var question in questions)
 {
     Console.WriteLine($"\n> {question}");
     var reply = await brain.AskAsync(question, new ConsoleListener());
+    memory.Reload();
     var u = brain.LastUsage;
     Console.WriteLine($"\n[{reply.Outcome}] notice={reply.Notice ?? "-"} in={u.InputTokens} out={u.OutputTokens} cacheRead={u.CacheReadTokens} cacheWrite={u.CacheWriteTokens} searches={u.WebSearches}");
 }

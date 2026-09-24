@@ -11,6 +11,7 @@ public sealed class ChatController : IBrainListener
     private readonly PetController _pet;
     private readonly Func<Brain?> _brain;
     private readonly Func<string> _petName;
+    private readonly Func<string> _noBrainMessage;
     private readonly ILog _log;
     private readonly Dispatcher _ui;
     private readonly DispatcherTimer _renderTimer;
@@ -26,12 +27,13 @@ public sealed class ChatController : IBrainListener
     private bool _canThinkHarder;
     private OnboardingFlow? _onboarding;
 
-    public ChatController(ChatBubble bubble, PetController pet, Func<Brain?> brain, Func<string> petName, ILog log)
+    public ChatController(ChatBubble bubble, PetController pet, Func<Brain?> brain, Func<string> petName, Func<string> noBrainMessage, ILog log)
     {
         _bubble = bubble;
         _pet = pet;
         _brain = brain;
         _petName = petName;
+        _noBrainMessage = noBrainMessage;
         _log = log;
         _ui = bubble.Dispatcher;
         _renderTimer = new DispatcherTimer(DispatcherPriority.Background, _ui) { Interval = TimeSpan.FromMilliseconds(60) };
@@ -59,6 +61,9 @@ public sealed class ChatController : IBrainListener
     public static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(90);
 
     public event Action? OnboardingCompleted;
+
+    /// <summary>Raised on the UI thread after every Brain turn (success or not).</summary>
+    public event Action? TurnFinished;
 
     public bool IsOpen => _bubble.IsVisible;
 
@@ -171,7 +176,7 @@ public sealed class ChatController : IBrainListener
         var brain = _brain();
         if (brain is null)
         {
-            _bubble.ShowContent(null, "I need an API key before I can think. Right-click me → **Settings**.", null);
+            _bubble.ShowContent(null, _noBrainMessage(), null);
             return;
         }
         if (brain.Busy) return;
@@ -215,6 +220,7 @@ public sealed class ChatController : IBrainListener
         _pet.Life.OnChatFinished(reply.Outcome == BrainOutcome.Ok);
         _pet.Refresh();
         _bubble.FocusInput();
+        TurnFinished?.Invoke();
     }
 
     private void RenderIfDirty()

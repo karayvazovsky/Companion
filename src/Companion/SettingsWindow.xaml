@@ -23,19 +23,30 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Text="Chat hotkey" VerticalAlignment="Center" />
-            <TextBox x:Name="HotkeyBox" Grid.Row="0" Grid.Column="1" Margin="0,3" />
-            <TextBlock Grid.Row="1" Text="Everyday effort" VerticalAlignment="Center" />
-            <ComboBox x:Name="EverydayBox" Grid.Row="1" Grid.Column="1" Margin="0,3" />
-            <TextBlock Grid.Row="2" Text="Think-harder effort" VerticalAlignment="Center" />
-            <ComboBox x:Name="HarderBox" Grid.Row="2" Grid.Column="1" Margin="0,3" />
-            <TextBlock Grid.Row="3" Text="Monthly cap (USD)" VerticalAlignment="Center" />
-            <TextBox x:Name="CapBox" Grid.Row="3" Grid.Column="1" Margin="0,3" />
-            <TextBlock Grid.Row="4" Text="Pet size" VerticalAlignment="Center" />
-            <ComboBox x:Name="ScaleBox" Grid.Row="4" Grid.Column="1" Margin="0,3" />
-            <CheckBox x:Name="AutostartBox" Grid.Row="5" Grid.ColumnSpan="2" Margin="0,8,0,0" Content="Start with Windows" />
+            <TextBlock Grid.Row="0" Text="Brain" VerticalAlignment="Center" />
+            <ComboBox x:Name="BrainBox" Grid.Row="0" Grid.Column="1" Margin="0,3" />
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,6" Foreground="Gray" TextWrapping="Wrap"
+                       Text="Subscription = uses your Claude plan through Claude Code (no extra cost). ApiKey = pay-per-use API credit (the monthly cap applies)." />
+            <TextBlock Grid.Row="2" Text="Everyday model" VerticalAlignment="Center" />
+            <ComboBox x:Name="EverydayModelBox" Grid.Row="2" Grid.Column="1" Margin="0,3" IsEditable="True" />
+            <TextBlock Grid.Row="3" Text="Think-harder model" VerticalAlignment="Center" />
+            <ComboBox x:Name="HarderModelBox" Grid.Row="3" Grid.Column="1" Margin="0,3" IsEditable="True" />
+            <TextBlock Grid.Row="4" Text="Chat hotkey" VerticalAlignment="Center" />
+            <TextBox x:Name="HotkeyBox" Grid.Row="4" Grid.Column="1" Margin="0,3" />
+            <TextBlock Grid.Row="5" Text="Everyday effort" VerticalAlignment="Center" />
+            <ComboBox x:Name="EverydayBox" Grid.Row="5" Grid.Column="1" Margin="0,3" />
+            <TextBlock Grid.Row="6" Text="Think-harder effort" VerticalAlignment="Center" />
+            <ComboBox x:Name="HarderBox" Grid.Row="6" Grid.Column="1" Margin="0,3" />
+            <TextBlock Grid.Row="7" Text="Monthly cap (USD)" VerticalAlignment="Center" />
+            <TextBox x:Name="CapBox" Grid.Row="7" Grid.Column="1" Margin="0,3" />
+            <TextBlock Grid.Row="8" Text="Pet size" VerticalAlignment="Center" />
+            <ComboBox x:Name="ScaleBox" Grid.Row="8" Grid.Column="1" Margin="0,3" />
         </Grid>
+        <CheckBox x:Name="AutostartBox" Margin="0,0,0,8" Content="Start with Windows" />
         <TextBlock x:Name="SpendText" Foreground="Gray" Margin="0,0,0,12" TextWrapping="Wrap" />
 
         <TextBlock Text="What I remember about you" FontWeight="SemiBold" />
