@@ -30,4 +30,10 @@ public partial class LineBubble : Window
         _timer.Stop();
         _timer.Start();
     }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _timer.Stop();
+        base.OnClosed(e);
+    }
 }
