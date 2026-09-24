@@ -12,6 +12,7 @@ public class OnboardingTests
         public SecretStore Secrets { get; }
         public Exception? ValidationError { get; set; }
         public List<string> ValidatedKeys { get; } = new();
+        public BrainKind Brain { get; set; } = BrainKind.ApiKey;
 
         public Rig()
         {
@@ -23,7 +24,7 @@ public class OnboardingTests
         {
             ValidatedKeys.Add(key);
             return ValidationError is null ? Task.CompletedTask : Task.FromException(ValidationError);
-        }, "Ctrl+Alt+Space");
+        }, "Ctrl+Alt+Space", () => Brain);
 
         public void Dispose() => Tmp.Dispose();
     }
@@ -102,5 +103,19 @@ public class OnboardingTests
 
         Assert.Equal(OnboardingStep.ApiKey, flow.Step);
         Assert.False(rig.Secrets.HasKey);
+    }
+
+    [Fact]
+    public async Task Subscription_brain_skips_the_key_step()
+    {
+        using var rig = new Rig { Brain = BrainKind.Subscription };
+        var flow = rig.Flow();
+        Assert.Null(await flow.SubmitAsync("Pip", CancellationToken.None));
+        Assert.Null(await flow.SubmitAsync("Karco", CancellationToken.None));
+        Assert.Equal(OnboardingStep.Done, flow.Step);
+        Assert.Contains("subscription", flow.Prompt);
+        Assert.False(rig.Secrets.HasKey);
+        Assert.True(OnboardingFlow.IsComplete(rig.Pet, rig.Secrets, BrainKind.Subscription));
+        Assert.False(OnboardingFlow.IsComplete(rig.Pet, rig.Secrets, BrainKind.ApiKey));
     }
 }

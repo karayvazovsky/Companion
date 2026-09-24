@@ -38,7 +38,8 @@ public sealed class SpendTracker(SettingsStore settings, IClock clock)
 
     public decimal ThisMonth => settings.Current.SpendByMonth.GetValueOrDefault(MonthKey);
 
-    public bool CapReached => ThisMonth >= Cap;
+    /// <summary>The cap only guards pay-per-use API spend; the subscription brain has no per-question cost.</summary>
+    public bool CapReached => settings.Current.Brain == BrainKind.ApiKey && ThisMonth >= Cap;
 
     public decimal Record(UsageTotals usage)
     {
@@ -52,6 +53,7 @@ public sealed class SpendTracker(SettingsStore settings, IClock clock)
     /// <summary>True exactly once per month, the first time spend reaches 80 % of the cap.</summary>
     public bool TakeWarning()
     {
+        if (settings.Current.Brain != BrainKind.ApiKey) return false;
         if (Cap <= 0 || ThisMonth < Cap * 0.8m || ThisMonth >= Cap || settings.Current.CapWarnedMonth == MonthKey) return false;
         settings.Current.CapWarnedMonth = MonthKey;
         settings.Save();

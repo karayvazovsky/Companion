@@ -21,6 +21,7 @@ public sealed class MemoryStore
 
     private readonly string _path;
     private readonly IClock _clock;
+    private readonly ILog _log;
     private readonly object _gate = new();
     private readonly Document _doc;
     private int _version;
@@ -29,6 +30,7 @@ public sealed class MemoryStore
     {
         _path = path;
         _clock = clock;
+        _log = log;
         _doc = JsonFile.Load(path, () => new Document(), log, clock);
         _doc.NextId = Math.Max(_doc.NextId, MaxExistingId() + 1);
     }
@@ -89,6 +91,24 @@ public sealed class MemoryStore
         }
         Changed?.Invoke();
         return true;
+    }
+
+    /// <summary>Re-reads memory.json; another process (the MCP memory server) may have changed it.</summary>
+    public void Reload()
+    {
+        bool changed;
+        lock (_gate)
+        {
+            var fresh = JsonFile.Load(_path, () => new Document(), _log, _clock);
+            changed = !fresh.Facts.SequenceEqual(_doc.Facts);
+            if (changed)
+            {
+                _doc.Facts = fresh.Facts;
+                _doc.NextId = Math.Max(Math.Max(_doc.NextId, fresh.NextId), MaxExistingId() + 1);
+                Interlocked.Increment(ref _version);
+            }
+        }
+        if (changed) Changed?.Invoke();
     }
 
     private static string FormatId(int n) => $"f_{n.ToString("00", CultureInfo.InvariantCulture)}";

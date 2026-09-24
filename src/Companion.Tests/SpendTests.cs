@@ -47,6 +47,7 @@ public class SpendTests
         using var tmp = new TempDir();
         var clock = FakeClock.At(2026, 9, 24, 12);
         var settings = new SettingsStore(tmp.PathOf("settings.json"), clock, NullLog.Instance);
+        settings.Current.Brain = BrainKind.ApiKey;
         settings.Current.MonthlyCapUsd = 1.00m;
         var spend = new SpendTracker(settings, clock);
 
@@ -58,6 +59,21 @@ public class SpendTests
         Assert.False(spend.CapReached);
 
         settings.Current.SpendByMonth["2026-09"] = 1.00m;
+        Assert.True(spend.CapReached);
+    }
+
+    [Fact]
+    public void Subscription_brain_never_hits_the_cap_or_warns()
+    {
+        using var tmp = new TempDir();
+        var clock = FakeClock.At(2026, 9, 24, 12);
+        var settings = new SettingsStore(tmp.PathOf("settings.json"), clock, NullLog.Instance);
+        settings.Current.MonthlyCapUsd = 1m;
+        settings.Current.SpendByMonth["2026-09"] = 5m;
+        var spend = new SpendTracker(settings, clock);
+        Assert.False(spend.CapReached);
+        Assert.False(spend.TakeWarning());
+        settings.Current.Brain = BrainKind.ApiKey;
         Assert.True(spend.CapReached);
     }
 }

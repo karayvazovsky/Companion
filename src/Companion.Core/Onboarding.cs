@@ -11,13 +11,15 @@ public sealed class OnboardingFlow
     private readonly SecretStore _secrets;
     private readonly Func<string, CancellationToken, Task> _validateKey;
     private readonly string _hotkey;
+    private readonly Func<BrainKind> _brain;
 
-    public OnboardingFlow(PetStateStore pet, SecretStore secrets, Func<string, CancellationToken, Task> validateKey, string hotkey)
+    public OnboardingFlow(PetStateStore pet, SecretStore secrets, Func<string, CancellationToken, Task> validateKey, string hotkey, Func<BrainKind>? brain = null)
     {
         _pet = pet;
         _secrets = secrets;
         _validateKey = validateKey;
         _hotkey = hotkey;
+        _brain = brain ?? (() => BrainKind.ApiKey);
         Step = NextStep();
     }
 
@@ -26,8 +28,8 @@ public sealed class OnboardingFlow
     /// <summary>Re-derives the step from the stores, e.g. after the key was saved in Settings.</summary>
     public OnboardingStep Refresh() => Step = NextStep();
 
-    public static bool IsComplete(PetStateStore pet, SecretStore secrets) =>
-        pet.Current.PetName is not null && pet.Current.UserName is not null && secrets.HasKey;
+    public static bool IsComplete(PetStateStore pet, SecretStore secrets, BrainKind brain = BrainKind.ApiKey) =>
+        pet.Current.PetName is not null && pet.Current.UserName is not null && (brain == BrainKind.Subscription || secrets.HasKey);
 
     public string Prompt => Step switch
     {
@@ -37,6 +39,8 @@ public sealed class OnboardingFlow
             $"Nice to meet you, {_pet.Current.UserName}! Last thing: I need an Anthropic API key to think.\n\n" +
             "1. Open **console.anthropic.com** → **API Keys**\n" +
             "2. Create a key and paste it here (it is stored encrypted on this PC only).",
+        _ when _brain() == BrainKind.Subscription =>
+            $"All set! I'll think with your Claude subscription (through Claude Code). Double-click me or press **{_hotkey}** whenever you need me. *wags*",
         _ => $"All set! Double-click me or press **{_hotkey}** whenever you need me. *wags*",
     };
 
@@ -86,6 +90,6 @@ public sealed class OnboardingFlow
     private OnboardingStep NextStep() =>
         _pet.Current.PetName is null ? OnboardingStep.PetName
         : _pet.Current.UserName is null ? OnboardingStep.UserName
-        : !_secrets.HasKey ? OnboardingStep.ApiKey
+        : _brain() == BrainKind.ApiKey && !_secrets.HasKey ? OnboardingStep.ApiKey
         : OnboardingStep.Done;
 }

@@ -80,7 +80,7 @@ public sealed class Brain(
             catch (ClaudeException ex)
             {
                 log.Error($"Claude call failed ({ex.Kind}).", ex);
-                return new BrainReply(BrainOutcome.Error, handler.Text, FriendlyError(ex.Kind));
+                return new BrainReply(BrainOutcome.Error, handler.Text, ex.UserMessage ?? FriendlyError(ex.Kind));
             }
             catch (OperationCanceledException)
             {
@@ -122,6 +122,9 @@ public sealed class Brain(
         ClaudeErrorKind.Billing => "Out of API credit. Top up at console.anthropic.com.",
         ClaudeErrorKind.RateLimited => "Claude is busy right now. Try again in a minute.",
         ClaudeErrorKind.Server => "Claude is having trouble right now. Try again in a bit.",
+        ClaudeErrorKind.NotInstalled => "I can't find Claude Code on this PC. Install it, or switch my Brain to API key in Settings.",
+        ClaudeErrorKind.NotLoggedIn => "Claude Code isn't logged in. Open a terminal, run `claude` and log in, then ask me again.",
+        ClaudeErrorKind.PlanLimit => "You've reached your Claude plan's usage limit. Try again a bit later.",
         _ => "Something went wrong (details are in data\\logs).",
     };
 

@@ -121,6 +121,27 @@ public class MemoryStoreTests
 
         Assert.True(v0 < v1 && v1 < v2 && v2 < store.Version);
     }
+
+    [Fact]
+    public void Reload_picks_up_changes_made_by_another_process()
+    {
+        using var tmp = new TempDir();
+        var app = NewStore(tmp);
+        var server = NewStore(tmp);
+        var changed = 0;
+        app.Changed += () => changed++;
+        var before = app.Version;
+
+        app.Reload();
+        Assert.Equal(before, app.Version);
+
+        server.Add("Likes teal");
+        app.Reload();
+        Assert.Equal("Likes teal", Assert.Single(app.Facts).Text);
+        Assert.Equal(before + 1, app.Version);
+        Assert.Equal(1, changed);
+        Assert.Equal("f_02", app.Add("Works in C4D").Fact!.Id);
+    }
 }
 
 public class PetStateStoreTests

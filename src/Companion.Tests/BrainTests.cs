@@ -185,6 +185,7 @@ public class BrainTests
     public async Task Spend_is_recorded_and_the_cap_blocks_requests()
     {
         using var rig = new Rig();
+        rig.Settings.Current.Brain = BrainKind.ApiKey;
         await rig.Brain.AskAsync("hi", rig.Listener);
         Assert.Equal(0.006m, rig.Spend.ThisMonth);
         Assert.Equal(new UsageTotals(1000, 100, 0, 0, 0), rig.Brain.LastUsage);
@@ -201,6 +202,7 @@ public class BrainTests
     public async Task Warns_once_when_crossing_eighty_percent()
     {
         using var rig = new Rig();
+        rig.Settings.Current.Brain = BrainKind.ApiKey;
         rig.Settings.Current.MonthlyCapUsd = 0.0075m;
 
         var reply = await rig.Brain.AskAsync("hi", rig.Listener);
@@ -278,5 +280,26 @@ public class BrainTests
         Assert.Equal(BrainOutcome.Error, reply.Outcome);
         Assert.Contains(expected, reply.Notice);
         Assert.False(rig.Brain.Busy);
+    }
+
+    [Theory]
+    [InlineData(ClaudeErrorKind.NotInstalled, "Claude Code")]
+    [InlineData(ClaudeErrorKind.NotLoggedIn, "log in")]
+    [InlineData(ClaudeErrorKind.PlanLimit, "limit")]
+    public async Task Subscription_errors_become_friendly_notices(ClaudeErrorKind kind, string expected)
+    {
+        using var rig = new Rig();
+        rig.Claude.Throw = new ClaudeException(kind, "raw");
+        var reply = await rig.Brain.AskAsync("hi", rig.Listener);
+        Assert.Contains(expected, reply.Notice);
+    }
+
+    [Fact]
+    public async Task A_user_message_on_the_exception_wins()
+    {
+        using var rig = new Rig();
+        rig.Claude.Throw = new ClaudeException(ClaudeErrorKind.PlanLimit, "raw", userMessage: "Resets at 18:30.");
+        var reply = await rig.Brain.AskAsync("hi", rig.Listener);
+        Assert.Equal("Resets at 18:30.", reply.Notice);
     }
 }

@@ -52,6 +52,28 @@ public class SettingsStoreTests
 
         Assert.Equal(4, store.Current.PetScale);
     }
+
+    [Fact]
+    public void Brain_defaults_to_subscription_with_sonnet_and_opus()
+    {
+        using var tmp = new TempDir();
+        var store = new SettingsStore(tmp.PathOf("settings.json"), FakeClock.At(2026, 9, 24, 12), NullLog.Instance);
+        Assert.Equal(BrainKind.Subscription, store.Current.Brain);
+        Assert.Equal("claude-sonnet-5", store.Current.SubscriptionEverydayModel);
+        Assert.Equal("claude-opus-5-5", store.Current.SubscriptionThinkHarderModel);
+        Assert.True(store.Current.AutoTeleport);
+    }
+
+    [Fact]
+    public void Blank_subscription_models_fall_back_to_defaults()
+    {
+        using var tmp = new TempDir();
+        var path = tmp.PathOf("settings.json");
+        System.IO.File.WriteAllText(path, """{ "subscriptionEverydayModel": " ", "subscriptionThinkHarderModel": "" }""");
+        var store = new SettingsStore(path, FakeClock.At(2026, 9, 24, 12), NullLog.Instance);
+        Assert.Equal("claude-sonnet-5", store.Current.SubscriptionEverydayModel);
+        Assert.Equal("claude-opus-5-5", store.Current.SubscriptionThinkHarderModel);
+    }
 }
 
 public class SecretStoreTests

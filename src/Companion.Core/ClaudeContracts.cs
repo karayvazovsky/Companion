@@ -34,9 +34,13 @@ public interface IClaudeClient
     Task ValidateKeyAsync(CancellationToken ct);
 }
 
-public enum ClaudeErrorKind { Network, Unauthorized, NoAccess, Billing, RateLimited, Server, BadRequest, Unknown }
+public enum ClaudeErrorKind { Network, Unauthorized, NoAccess, Billing, RateLimited, Server, BadRequest, NotInstalled, NotLoggedIn, PlanLimit, Unknown }
 
-public sealed class ClaudeException(ClaudeErrorKind kind, string message, Exception? inner = null) : Exception(message, inner)
+public sealed class ClaudeException(ClaudeErrorKind kind, string message, Exception? inner = null, string? userMessage = null)
+    : Exception(message, inner)
 {
     public ClaudeErrorKind Kind { get; } = kind;
+
+    /// <summary>Optional ready-to-show text (e.g. with a reset time) that overrides the generic message for the kind.</summary>
+    public string? UserMessage { get; } = userMessage;
 }
