@@ -20,6 +20,20 @@ internal static class NativeMethods
     internal const int QUNS_BUSY = 2;
     internal const int QUNS_RUNNING_D3D_FULL_SCREEN = 3;
     internal const int QUNS_PRESENTATION_MODE = 4;
+    internal const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+    internal const int DWMWA_CLOAKED = 14;
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct RECT { public int Left, Top, Right, Bottom; }
+
+    internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+    [DllImport("user32.dll")] internal static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] internal static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetWindowTextLength(IntPtr hWnd);
+    [DllImport("dwmapi.dll")] internal static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT value, int size);
+    [DllImport("dwmapi.dll")] internal static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct LASTINPUTINFO

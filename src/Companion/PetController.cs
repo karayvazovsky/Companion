@@ -6,10 +6,15 @@ using Companion.Core;
 
 namespace Companion;
 
-/// <summary>Drives PetLife once per second, plays animations only when the frame changes, walks along the taskbar.</summary>
+/// <summary>
+/// Drives PetLife once per second and keeps the pet on a perch (floor, window top, wall, ceiling or a free spot) on any
+/// monitor: dragging (dangle + pendulum), dropping (snap), following windows, falling, walking and teleporting.
+/// </summary>
 public sealed class PetController : IDisposable
 {
     private const double WalkSpeedDipPerSecond = 24;
+    private const double FallSpeedDipPerSecond = 900;
+    private static readonly TimeSpan PoofDuration = TimeSpan.FromMilliseconds(400);
 
     private readonly PetWindow _window;
     private readonly PetLife _life;
@@ -18,16 +23,36 @@ public sealed class PetController : IDisposable
     private readonly IUserActivity _activity;
     private readonly SettingsStore _settings;
     private readonly PetStateStore _petStore;
+    private readonly Func<bool> _chatBusy;
+    private readonly DesktopScanner _desktop;
+    private readonly Random _rng = new();
+    private readonly Pendulum _pendulum = new();
     private readonly DispatcherTimer _lifeTimer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _animationTimer = new(DispatcherPriority.Render);
+    private readonly DispatcherTimer _motionTimer = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
+    private readonly DispatcherTimer _followTimer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
+    private readonly DispatcherTimer _poofTimer = new(DispatcherPriority.Normal) { Interval = PoofDuration };
     private readonly Stopwatch _time = Stopwatch.StartNew();
+    private IReadOnlyList<ScreenArea> _screens = [];
+    private IReadOnlyList<DesktopWindow> _windows = [];
+    private Perch _perch = new(PerchKind.Floor, 0, 0);
     private TimeSpan _lastAnimationTick;
+    private TimeSpan _lastMotionTick;
+    private TimeSpan _lastDragTick;
+    private Point _lastCursor;
+    private double _cursorVelocityX;
+    private double? _fallTargetY;
+    private string? _overrideAnimation;
+    private Action? _afterPoof;
     private int _shownFrame = -1;
     private bool _suspended;
+    private bool _held;
+    private bool _disposed;
     private DateTime _hiddenUntil = DateTime.MinValue;
+    private DateTime _nextTeleport;
     private long _ticks;
 
-    public PetController(PetWindow window, PetLife life, SpriteSheet sheet, IUserActivity activity, SettingsStore settings, PetStateStore petStore)
+    public PetController(PetWindow window, PetLife life, SpriteSheet sheet, IUserActivity activity, SettingsStore settings, PetStateStore petStore, Func<bool> chatBusy)
     {
         _window = window;
         _life = life;
@@ -35,15 +60,23 @@ public sealed class PetController : IDisposable
         _activity = activity;
         _settings = settings;
         _petStore = petStore;
+        _chatBusy = chatBusy;
+        _desktop = new DesktopScanner(window);
         _player = new AnimationPlayer(sheet.Definition);
+        _nextTeleport = DateTime.Now + NextTeleportDelay();
 
         _lifeTimer.Tick += (_, _) => Refresh();
         _animationTimer.Tick += (_, _) => OnAnimationTick();
+        _motionTimer.Tick += (_, _) => OnMotionTick();
+        _followTimer.Tick += (_, _) => OnFollowTick();
+        _poofTimer.Tick += (_, _) => OnPoofTick();
         _window.Clicked += OnClicked;
         _window.DoubleClicked += () => ChatRequested?.Invoke();
-        _window.Dragged += left => _petStore.Current.PositionX = left;
+        _window.DragStarted += OnDragStarted;
+        _window.DragMoved += OnDragMoved;
+        _window.DragEnded += OnDragEnded;
         _window.ContextMenu = BuildMenu();
-        ApplyScale();
+        _window.SetSize(Size);
     }
 
     public event Action? ChatRequested;
@@ -56,12 +89,35 @@ public sealed class PetController : IDisposable
 
     public Window Window => _window;
 
-    public Rect Bounds => new(_window.Left, _window.Top, _window.Width, _window.Height);
+    /// <summary>The sprite square on screen (DIPs).</summary>
+    public Rect Bounds
+    {
+        get
+        {
+            var p = _window.SpritePosition;
+            return new Rect(p.X, p.Y, Size, Size);
+        }
+    }
+
+    /// <summary>Work area of the monitor the pet is on (DIPs).</summary>
+    public Rect WorkArea
+    {
+        get
+        {
+            var b = Bounds;
+            var wa = PerchPlanner.ScreenFor(b.X + Size / 2, b.Y + Size / 2, Screens()).WorkArea;
+            return new Rect(wa.X, wa.Y, wa.Width, wa.Height);
+        }
+    }
+
+    private double Size => _sheet.Definition.FrameSize * _settings.Current.PetScale;
 
     public void Start()
     {
         _window.Show();
-        Place();
+        _desktop.IgnoreWindow(_window);
+        _screens = _desktop.Screens();
+        RestorePerch();
         Refresh();
         _lifeTimer.Start();
     }
@@ -70,27 +126,32 @@ public sealed class PetController : IDisposable
     public void Refresh()
     {
         _ticks++;
-        var tick = _life.Tick(_activity.Sample());
+        var activity = _activity.Sample();
+        var tick = _life.Tick(activity);
         var hide = tick.Suspended || DateTime.Now < _hiddenUntil;
         if (hide != _suspended) SetSuspended(hide);
         if (_ticks % 60 == 0) _petStore.Save();
         if (hide) return;
 
-        Play(AnimationFor(tick.State));
-        _window.SetFacing(tick.State == PetStateKind.Walk ? _life.WalkDirection : 1);
         if (_ticks % 5 == 0)
         {
+            _screens = _desktop.Screens();
             _window.Topmost = false;   // re-assert z-order; the taskbar sometimes covers topmost windows
             _window.Topmost = true;
-            Place();
+            if (_perch.Kind == PerchKind.Floor && !_held && _fallTargetY is null)
+                SetPerch(PerchPlanner.Fall(_perch.X, Size, _perch.Y, _screens));   // taskbar moved or resolution changed
         }
+        Play(AnimationFor(tick.State));
+        if (!_held) _window.SetFacing(tick.State == PetStateKind.Walk && _perch.CanWalk ? _life.WalkDirection : 1);
         if (tick.Line is { } line) LineReady?.Invoke(line);
+        MaybeAutoTeleport(tick.State, activity);
     }
 
     public void ApplyScale()
     {
-        _window.SetSize(_sheet.Definition.FrameSize * _settings.Current.PetScale);
-        if (_window.IsVisible) Place();
+        if (_window.SpriteSize == Size) return;   // settings saved without a size change: stay on the current perch
+        _window.SetSize(Size);
+        if (_window.IsVisible) SetPerch(PerchPlanner.Fall(_perch.X, Size, _perch.Y, Screens()));
     }
 
     public void HideFor(TimeSpan duration)
@@ -105,23 +166,104 @@ public sealed class PetController : IDisposable
         Refresh();
     }
 
+    /// <summary>Poof out, reappear at a random perch on a random monitor, poof in.</summary>
+    public void Teleport()
+    {
+        if (_held || _overrideAnimation is not null || !_petStore.Current.Hatched || _suspended) return;
+        _nextTeleport = DateTime.Now + NextTeleportDelay();
+        _overrideAnimation = "poof";
+        Play("poof", restart: true);
+        AfterPoof(() =>
+        {
+            _screens = _desktop.Screens();
+            _windows = _desktop.Windows();
+            SetPerch(PerchPlanner.Random(_rng, Size, _screens, _windows));
+            Play("poof", restart: true);
+            AfterPoof(() =>
+            {
+                _overrideAnimation = null;
+                Refresh();
+            });
+        });
+    }
+
     public void Dispose()
     {
+        _disposed = true;
         _lifeTimer.Stop();
         _animationTimer.Stop();
+        _motionTimer.Stop();
+        _followTimer.Stop();
+        CancelTeleport();
         _petStore.Save();
         _window.Close();
     }
 
-    private void OnClicked()
+    private IReadOnlyList<ScreenArea> Screens()
     {
-        if (!_petStore.Current.Hatched)
+        if (_screens.Count == 0) _screens = _desktop.Screens();
+        return _screens;
+    }
+
+    private void RestorePerch()
+    {
+        var state = _petStore.Current;
+        var screens = Screens();
+        if (state.PositionX is not { } x)
         {
-            EggClicked?.Invoke();
+            var wa = screens[0].WorkArea;
+            SetPerch(new Perch(PerchKind.Floor, wa.Right - Size - 160, wa.Bottom - Size));
             return;
         }
-        _life.OnClick();
-        Refresh();
+        var y = state.PositionY ?? 0;
+        SetPerch(state.Perch is PerchKind.Floor or PerchKind.WindowTop
+            ? PerchPlanner.Fall(x, Size, y, screens)
+            : PerchPlanner.ForDrop(x, y, Size, screens, []));
+    }
+
+    private void SetPerch(Perch perch)
+    {
+        _perch = perch;
+        _fallTargetY = null;
+        _window.SpritePosition = new Point(perch.X, perch.Y);
+        _petStore.Current.Perch = perch.Kind;
+        _petStore.Current.PositionX = perch.X;
+        _petStore.Current.PositionY = perch.Y;
+        if (perch.Kind != PerchKind.Ceiling) _pendulum.Reset();
+        ApplyPose();
+        UpdateTimers();
+    }
+
+    private void ApplyPose()
+    {
+        if (_held)
+        {
+            _window.SetTilt(_pendulum.Angle, pivotTop: true);
+            return;
+        }
+        switch (_perch.Kind)
+        {
+            case PerchKind.WallLeft: _window.SetTilt(-90, pivotTop: false); break;
+            case PerchKind.WallRight: _window.SetTilt(90, pivotTop: false); break;
+            case PerchKind.Ceiling: _window.SetTilt(_pendulum.Angle, pivotTop: true); break;
+            default: _window.SetTilt(0, pivotTop: false); break;
+        }
+    }
+
+    /// <summary>Motion (30 fps) only while held, falling or hanging from the ceiling; following only on a window top.</summary>
+    private void UpdateTimers()
+    {
+        var visible = !_suspended;
+        var followNeeded = visible && !_held && _perch.Kind == PerchKind.WindowTop && _fallTargetY is null;
+        if (followNeeded && !_followTimer.IsEnabled) _followTimer.Start();
+        if (!followNeeded) _followTimer.Stop();
+        var motionNeeded = visible && (_held || _fallTargetY is not null || _perch.Kind == PerchKind.Ceiling);
+        if (motionNeeded && !_motionTimer.IsEnabled)
+        {
+            _lastMotionTick = _time.Elapsed;
+            _motionTimer.Start();
+        }
+        if (!motionNeeded) _motionTimer.Stop();
     }
 
     private void SetSuspended(bool suspended)
@@ -129,19 +271,39 @@ public sealed class PetController : IDisposable
         _suspended = suspended;
         if (suspended)
         {
+            CancelTeleport();
             _animationTimer.Stop();
             _window.Hide();
         }
         else
         {
             _window.Show();
-            Place();
+            _window.SpritePosition = new Point(_perch.X, _perch.Y);
         }
+        UpdateTimers();
     }
 
-    private void Play(string animation)
+    private string AnimationFor(PetStateKind state)
     {
-        if (_player.Current == animation && _animationTimer.IsEnabled) return;
+        if (_overrideAnimation is { } forced) return forced;
+        if (state == PetStateKind.Egg) return "egg";
+        if (_held || _perch.Kind is PerchKind.Ceiling or PerchKind.WallLeft or PerchKind.WallRight) return "hang";
+        return state switch
+        {
+            PetStateKind.Walk => _perch.CanWalk ? "walk" : "idle",
+            PetStateKind.Happy => "happy",
+            PetStateKind.Bored => "bored",
+            PetStateKind.Sleepy => "sleepy",
+            PetStateKind.Sleep => "sleep",
+            PetStateKind.Thinking => "thinking",
+            PetStateKind.Talking => "talking",
+            _ => "idle",
+        };
+    }
+
+    private void Play(string animation, bool restart = false)
+    {
+        if (!restart && _player.Current == animation && _animationTimer.IsEnabled) return;
         _player.Play(animation, _time.Elapsed);
         _animationTimer.Interval = _player.FrameInterval;
         _shownFrame = -1;
@@ -159,38 +321,177 @@ public sealed class PetController : IDisposable
             _shownFrame = frame;
             _window.SetFrame(_sheet.Frame(frame));
         }
-        if (_life.State == PetStateKind.Walk) Walk(now - _lastAnimationTick);
+        if (_life.State == PetStateKind.Walk && _perch.CanWalk && !_held && _fallTargetY is null && _overrideAnimation is null)
+            Walk(now - _lastAnimationTick);
         _lastAnimationTick = now;
     }
 
     private void Walk(TimeSpan elapsed)
     {
-        var area = SystemParameters.WorkArea;
-        var max = Math.Max(area.Left, area.Right - _window.Width);
-        var x = _window.Left + _life.WalkDirection * WalkSpeedDipPerSecond * elapsed.TotalSeconds;
-        if (x <= area.Left || x >= max)
+        var (min, max) = PerchPlanner.WalkRange(_perch, Size, Screens(), _windows);
+        var x = _perch.X + _life.WalkDirection * WalkSpeedDipPerSecond * elapsed.TotalSeconds;
+        if (x <= min || x >= max)
         {
-            x = Math.Clamp(x, area.Left, max);
+            x = Math.Clamp(x, min, Math.Max(min, max));
             _life.ReverseWalk();
             _window.SetFacing(_life.WalkDirection);
         }
-        _window.Left = x;
+        var offset = _perch.Kind == PerchKind.WindowTop ? _perch.OffsetX + (x - _perch.X) : 0;
+        _perch = _perch with { X = x, OffsetX = offset };
+        _window.SpritePosition = new Point(_perch.X, _perch.Y);
         _petStore.Current.PositionX = x;
     }
 
-    /// <summary>Sits on top of the taskbar of the primary monitor, at the remembered x position.</summary>
-    private void Place()
+    private void OnFollowTick()
     {
-        var area = SystemParameters.WorkArea;
-        _window.Top = area.Bottom - _window.Height;
-        var x = _petStore.Current.PositionX ?? area.Right - _window.Width - 160;
-        _window.Left = Math.Clamp(x, area.Left, Math.Max(area.Left, area.Right - _window.Width));
+        if (_held || _perch.Kind != PerchKind.WindowTop)
+        {
+            _followTimer.Stop();
+            return;
+        }
+        _windows = _desktop.Windows();
+        var next = PerchPlanner.Follow(_perch, Size, Screens(), _windows);
+        if (next is null)
+        {
+            StartFall();
+            return;
+        }
+        if (next == _perch) return;
+        _perch = next;
+        _window.SpritePosition = new Point(next.X, next.Y);
+        _petStore.Current.PositionX = next.X;
+        _petStore.Current.PositionY = next.Y;
+    }
+
+    private void StartFall()
+    {
+        var landing = PerchPlanner.Fall(_perch.X, Size, _perch.Y, Screens());
+        _perch = landing with { Y = Math.Min(_perch.Y, landing.Y) };
+        _fallTargetY = landing.Y;
+        ApplyPose();
+        UpdateTimers();
+    }
+
+    private void OnMotionTick()
+    {
+        var now = _time.Elapsed;
+        var dt = (now - _lastMotionTick).TotalSeconds;
+        _lastMotionTick = now;
+
+        if (_held)
+        {
+            _cursorVelocityX *= Math.Pow(0.02, dt);   // the swing dies down when the mouse stops
+            _pendulum.Step(dt, _cursorVelocityX);
+            _window.SetTilt(_pendulum.Angle, pivotTop: true);
+            return;
+        }
+        if (_fallTargetY is { } target)
+        {
+            var y = Math.Min(target, _perch.Y + FallSpeedDipPerSecond * dt);
+            _perch = _perch with { Y = y };
+            _window.SpritePosition = new Point(_perch.X, y);
+            if (y >= target) SetPerch(_perch);
+            return;
+        }
+        if (_perch.Kind == PerchKind.Ceiling)
+        {
+            _pendulum.Step(dt, 0, Pendulum.IdleSwing(now.TotalSeconds));
+            _window.SetTilt(_pendulum.Angle, pivotTop: true);
+            return;
+        }
+        _motionTimer.Stop();
+    }
+
+    private void OnClicked()
+    {
+        if (!_petStore.Current.Hatched)
+        {
+            EggClicked?.Invoke();
+            return;
+        }
+        _life.OnClick();
+        Refresh();
+    }
+
+    private void OnDragStarted(Point cursor)
+    {
+        _held = true;
+        _fallTargetY = null;
+        _pendulum.Reset();
+        _lastCursor = cursor;
+        _lastDragTick = _time.Elapsed;
+        _cursorVelocityX = 0;
+        MoveHeld(cursor);
+        _window.SetFacing(1);
+        Play(AnimationFor(_life.State), restart: true);
+        ApplyPose();
+        UpdateTimers();
+    }
+
+    private void OnDragMoved(Point cursor)
+    {
+        var now = _time.Elapsed;
+        var dt = Math.Max(0.001, (now - _lastDragTick).TotalSeconds);
+        _lastDragTick = now;
+        _cursorVelocityX = _cursorVelocityX * 0.6 + (cursor.X - _lastCursor.X) / dt * 0.4;
+        _lastCursor = cursor;
+        MoveHeld(cursor);
+    }
+
+    /// <summary>While held, the pet hangs from the cursor by its hands (top-centre of the sprite).</summary>
+    private void MoveHeld(Point cursor) => _window.SpritePosition = new Point(cursor.X - Size / 2, cursor.Y - Size * 0.1);
+
+    private void OnDragEnded(Point cursor)
+    {
+        if (_disposed) return;   // capture is lost while the window closes
+        _held = false;
+        _pendulum.Reset();
+        var p = _window.SpritePosition;
+        _screens = _desktop.Screens();
+        _windows = _desktop.Windows();
+        SetPerch(PerchPlanner.ForDrop(p.X, p.Y, Size, _screens, _windows));
+        Refresh();
+    }
+
+    private void MaybeAutoTeleport(PetStateKind state, ActivitySnapshot activity)
+    {
+        if (!_settings.Current.AutoTeleport || DateTime.Now < _nextTeleport) return;
+        if (_held || _chatBusy() || activity.UserIdle >= TimeSpan.FromMinutes(1)) return;
+        if (state is not (PetStateKind.Idle or PetStateKind.Bored or PetStateKind.Walk)) return;
+        Teleport();
+    }
+
+    private TimeSpan NextTeleportDelay() => TimeSpan.FromMinutes(5 + _rng.NextDouble() * 10);
+
+    /// <summary>Runs <paramref name="action"/> once the current poof has played. One step pending at a time.</summary>
+    private void AfterPoof(Action action)
+    {
+        _afterPoof = action;
+        _poofTimer.Stop();
+        _poofTimer.Start();
+    }
+
+    private void OnPoofTick()
+    {
+        _poofTimer.Stop();
+        var next = _afterPoof;
+        _afterPoof = null;
+        next?.Invoke();
+    }
+
+    /// <summary>Abandons a teleport in progress (hidden or shutting down); the pet stays wherever it is now.</summary>
+    private void CancelTeleport()
+    {
+        _poofTimer.Stop();
+        _afterPoof = null;
+        _overrideAnimation = null;
     }
 
     private ContextMenu BuildMenu()
     {
         var menu = new ContextMenu();
         menu.Items.Add(Item("Chat", () => ChatRequested?.Invoke()));
+        menu.Items.Add(Item("Teleport", Teleport));
         menu.Items.Add(Item("Sleep", () => { _life.ForceSleep(); Refresh(); }));
         menu.Items.Add(Item("Hide for 1 hour", () => HideFor(TimeSpan.FromHours(1))));
         menu.Items.Add(Item("Settings", () => SettingsRequested?.Invoke()));
@@ -205,17 +506,4 @@ public sealed class PetController : IDisposable
         item.Click += (_, _) => action();
         return item;
     }
-
-    private static string AnimationFor(PetStateKind state) => state switch
-    {
-        PetStateKind.Egg => "egg",
-        PetStateKind.Walk => "walk",
-        PetStateKind.Happy => "happy",
-        PetStateKind.Bored => "bored",
-        PetStateKind.Sleepy => "sleepy",
-        PetStateKind.Sleep => "sleep",
-        PetStateKind.Thinking => "thinking",
-        PetStateKind.Talking => "talking",
-        _ => "idle",
-    };
 }

@@ -19,14 +19,16 @@ public partial class LineBubble : Window
         };
     }
 
-    public void Say(string text, Rect anchor)
+    /// <summary>Shows the line above the pet (<paramref name="anchor"/>), or below it when its monitor has no room above.</summary>
+    public void Say(string text, Rect anchor, Rect area)
     {
         LineText.Text = text;
         Show();
         UpdateLayout();
-        var area = SystemParameters.WorkArea;
+        if (area.Width <= 0) area = SystemParameters.WorkArea;
         Left = Math.Clamp(anchor.Left + anchor.Width / 2 - ActualWidth / 2, area.Left, Math.Max(area.Left, area.Right - ActualWidth));
-        Top = Math.Max(area.Top, anchor.Top - ActualHeight);
+        var above = anchor.Top - ActualHeight;
+        Top = above >= area.Top ? above : Math.Clamp(anchor.Bottom, area.Top, Math.Max(area.Top, area.Bottom - ActualHeight));
         _timer.Stop();
         _timer.Start();
     }

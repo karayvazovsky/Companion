@@ -15,6 +15,7 @@ public sealed class TrayIcon : IDisposable
         _image = ToIcon(frame);
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Chat", null, (_, _) => ChatClicked?.Invoke());
+        menu.Items.Add("Teleport", null, (_, _) => TeleportClicked?.Invoke());
         menu.Items.Add("Show / hide", null, (_, _) => ToggleClicked?.Invoke());
         menu.Items.Add("Sleep", null, (_, _) => SleepClicked?.Invoke());
         menu.Items.Add("Settings", null, (_, _) => SettingsClicked?.Invoke());
@@ -25,6 +26,7 @@ public sealed class TrayIcon : IDisposable
     }
 
     public event Action? ChatClicked;
+    public event Action? TeleportClicked;
     public event Action? ToggleClicked;
     public event Action? SleepClicked;
     public event Action? SettingsClicked;

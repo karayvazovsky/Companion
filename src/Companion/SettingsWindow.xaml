@@ -47,6 +47,7 @@
             <ComboBox x:Name="ScaleBox" Grid.Row="8" Grid.Column="1" Margin="0,3" />
         </Grid>
         <CheckBox x:Name="AutostartBox" Margin="0,0,0,8" Content="Start with Windows" />
+        <CheckBox x:Name="AutoTeleportBox" Margin="0,0,0,8" Content="Teleport on its own" />
         <TextBlock x:Name="SpendText" Foreground="Gray" Margin="0,0,0,12" TextWrapping="Wrap" />
 
         <TextBlock Text="What I remember about you" FontWeight="SemiBold" />

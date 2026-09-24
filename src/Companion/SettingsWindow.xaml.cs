@@ -39,6 +39,7 @@ public partial class SettingsWindow : Window
         CapBox.Text = settings.MonthlyCapUsd.ToString("0.##", CultureInfo.InvariantCulture);
         ScaleBox.SelectedItem = settings.PetScale;
         AutostartBox.IsChecked = settings.StartWithWindows;
+        AutoTeleportBox.IsChecked = settings.AutoTeleport;
         SpendText.Text = $"Estimated spend this month: ${deps.Spend.ThisMonth:0.00} of ${deps.Spend.Cap:0.##}. A cap of 0 stops all questions.";
         KeyStatus.Text = deps.Secrets.HasKey ? "A key is saved (encrypted on this PC)." : "No key saved yet.";
 
@@ -126,6 +127,7 @@ public partial class SettingsWindow : Window
         settings.MonthlyCapUsd = cap;
         settings.PetScale = (int)ScaleBox.SelectedItem;
         settings.StartWithWindows = AutostartBox.IsChecked == true;
+        settings.AutoTeleport = AutoTeleportBox.IsChecked == true;
         _deps.Settings.Save();
         _deps.Applied();
         Close();

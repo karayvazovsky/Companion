@@ -45,7 +45,8 @@ public sealed class AppHost : IDisposable
         _tools.Register(new ForgetTool(_memory));
 
         var sheet = LoadSheet(Path.Combine(paths.Skins, "default"));
-        _pet = new PetController(new PetWindow(), new PetLife(_petStore.Current, clock, new Random()), sheet, _activity, _settings, _petStore);
+        _pet = new PetController(new PetWindow(), new PetLife(_petStore.Current, clock, new Random()), sheet, _activity, _settings, _petStore,
+            () => _chat?.IsOpen == true || _brain?.Busy == true);   // _chat is assigned right after
         _tray = new TrayIcon(sheet.Frame(0));
         _chat = new ChatController(_bubble, _pet, () => _brain, () => PetName, () => _noBrainMessage, log);
 
@@ -53,8 +54,9 @@ public sealed class AppHost : IDisposable
         _pet.ChatRequested += OnChatRequested;
         _pet.SettingsRequested += OpenSettings;
         _pet.QuitRequested += () => QuitRequested?.Invoke();
-        _pet.LineReady += text => { if (!_chat.IsOpen) _line.Say(text, _pet.Bounds); };
+        _pet.LineReady += text => { if (!_chat.IsOpen) _line.Say(text, _pet.Bounds, _pet.WorkArea); };
         _tray.ChatClicked += OnChatRequested;
+        _tray.TeleportClicked += _pet.Teleport;
         _tray.ToggleClicked += _pet.ToggleVisible;
         _tray.SleepClicked += () => { _pet.Life.ForceSleep(); _pet.Refresh(); };
         _tray.SettingsClicked += OpenSettings;

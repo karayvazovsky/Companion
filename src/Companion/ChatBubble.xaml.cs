@@ -9,6 +9,7 @@ namespace Companion;
 public partial class ChatBubble : Window
 {
     private Rect _anchor;
+    private Rect _area;
 
     public ChatBubble()
     {
@@ -80,9 +81,11 @@ public partial class ChatBubble : Window
         AnswerScroll.ScrollToEnd();
     }
 
-    public void ShowAt(Rect anchor)
+    /// <summary>Opens next to the pet (<paramref name="anchor"/>), kept inside the pet's monitor work area.</summary>
+    public void ShowAt(Rect anchor, Rect area)
     {
         _anchor = anchor;
+        _area = area;
         if (!IsVisible) Show();
         Reposition();
         Activate();
@@ -98,9 +101,10 @@ public partial class ChatBubble : Window
     private void Reposition()
     {
         if (!IsVisible) return;
-        var area = SystemParameters.WorkArea;
+        var area = _area.Width > 0 ? _area : SystemParameters.WorkArea;
         Left = Math.Clamp(_anchor.Left + _anchor.Width / 2 - ActualWidth / 2, area.Left, Math.Max(area.Left, area.Right - ActualWidth));
-        Top = Math.Max(area.Top, _anchor.Top - ActualHeight + 8);
+        var above = _anchor.Top - ActualHeight + 8;
+        Top = above >= area.Top ? above : Math.Clamp(_anchor.Bottom - 8, area.Top, Math.Max(area.Top, area.Bottom - ActualHeight));
     }
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)

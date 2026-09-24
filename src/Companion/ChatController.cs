@@ -89,7 +89,7 @@ public sealed class ChatController : IBrainListener
         {
             _bubble.ShowContent(null, "*wags* What's up?", null);
         }
-        _bubble.ShowAt(_pet.Bounds);
+        _bubble.ShowAt(_pet.Bounds, _pet.WorkArea);
     }
 
     public void StartOnboarding(OnboardingFlow flow)
