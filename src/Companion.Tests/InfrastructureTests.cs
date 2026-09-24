@@ -71,4 +71,22 @@ public class FileLogTests
         Assert.Contains("ERROR boom", today);
         Assert.Contains("InvalidOperationException", today);
     }
+
+    [Fact]
+    public void Constructor_tolerates_locked_old_log_files()
+    {
+        using var tmp = new TempDir();
+        var oldPath = tmp.PathOf("app-2026-09-10.log");
+        File.WriteAllText(oldPath, "old");
+
+        using (var locked = new FileStream(oldPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var clock = FakeClock.At(2026, 9, 24, 8);
+            var log = new FileLog(tmp.Root, clock);
+            log.Info("ok");
+
+            var today = File.ReadAllText(tmp.PathOf("app-2026-09-24.log"));
+            Assert.Contains("INFO ok", today);
+        }
+    }
 }

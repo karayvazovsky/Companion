@@ -34,7 +34,7 @@ public sealed class FileLog : ILog
             var stamp = Path.GetFileNameWithoutExtension(file)[4..];
             if (DateTime.TryParseExact(stamp, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) && day < cutoff)
             {
-                File.Delete(file);
+                try { File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
             }
         }
     }
