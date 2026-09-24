@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Companion.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Anthropic" Version="12.50.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
+  </ItemGroup>
+</Project>
