@@ -70,6 +70,31 @@ public class DesktopTests
     }
 
     [Fact]
+    public void Walk_range_clamps_to_a_single_point_on_screens_narrower_than_the_pet()
+    {
+        var narrow = new ScreenArea(new RectD(0, 0, 40, 1000), new RectD(0, 0, 40, 1000));
+        Assert.Equal((0d, 0d), PerchPlanner.WalkRange(new Perch(PerchKind.Floor, 0, 936), Size, [narrow], []));
+    }
+
+    [Fact]
+    public void Only_the_frontmost_window_under_the_pet_counts()
+    {
+        // Two overlapping windows, frontmost first: the frontmost's near top wins.
+        var front = new DesktopWindow(10, new RectD(400, 300, 800, 600));
+        var behind = new DesktopWindow(20, new RectD(450, 250, 800, 600));
+        var onFront = PerchPlanner.ForDrop(700, 300 - 64 + 10, Size, Screens, [front, behind]);
+        Assert.Equal(new Perch(PerchKind.WindowTop, 700, 236, 10, 300), onFront);
+
+        // Frontmost window's top is far from the drop; a window further back has a top within
+        // snap distance, but it's never examined because only the frontmost window under the
+        // pet counts. The drop falls through to Free rather than snapping to the back window.
+        var farFront = new DesktopWindow(1, new RectD(500, 100, 800, 50));
+        var nearBehind = new DesktopWindow(2, new RectD(500, 690, 800, 50));
+        var ignoresBackWindow = PerchPlanner.ForDrop(700, 700 - 64 + 10, Size, Screens, [farFront, nearBehind]);
+        Assert.Equal(new Perch(PerchKind.Free, 700, 646), ignoresBackWindow);
+    }
+
+    [Fact]
     public void Random_perches_stay_on_screen_and_use_every_kind()
     {
         var rng = new Random(3);

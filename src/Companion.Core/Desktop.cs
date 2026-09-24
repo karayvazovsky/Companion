@@ -113,7 +113,7 @@ public static class PerchPlanner
         if (perch.Kind == PerchKind.WindowTop && windows.FirstOrDefault(w => w.Handle == perch.WindowHandle) is { } window)
             return (window.Bounds.Left, window.Bounds.Right - size);
         var wa = ScreenFor(perch.X + size / 2, perch.Y + size / 2, screens).WorkArea;
-        return (wa.Left, wa.Right - size);
+        return (wa.Left, Math.Max(wa.Left, wa.Right - size));
     }
 
     private static bool Perchable(DesktopWindow window, RectD workArea, double size) =>
