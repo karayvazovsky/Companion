@@ -76,4 +76,42 @@ public class McpTests
         Assert.True(Parse(lines[2]).GetProperty("result").GetProperty("isError").GetBoolean());
         Assert.Equal("Likes teal", Assert.Single(memory.Facts).Text);
     }
+
+    [Fact]
+    public void Malformed_but_valid_json_requests_get_invalid_request_errors()
+    {
+        var (server, _, tmp) = NewServer();
+        using var cleanup = tmp;
+
+        var bareScalar = Parse(server.Handle("42"));
+        Assert.Equal(-32600, bareScalar.GetProperty("error").GetProperty("code").GetInt32());
+        Assert.Equal(JsonValueKind.Null, bareScalar.GetProperty("id").ValueKind);
+
+        var bareArray = Parse(server.Handle("[]"));
+        Assert.Equal(-32600, bareArray.GetProperty("error").GetProperty("code").GetInt32());
+        Assert.Equal(JsonValueKind.Null, bareArray.GetProperty("id").ValueKind);
+
+        var nonStringMethod = Parse(server.Handle("""{"jsonrpc":"2.0","id":1,"method":123}"""));
+        Assert.Equal(-32600, nonStringMethod.GetProperty("error").GetProperty("code").GetInt32());
+        Assert.Equal(1, nonStringMethod.GetProperty("id").GetInt32());
+    }
+
+    [Fact]
+    public async Task RunAsync_recovers_from_a_malformed_line_and_keeps_serving()
+    {
+        var (server, _, tmp) = NewServer();
+        using var cleanup = tmp;
+        var input = new StringReader(
+            "42" + "\n" +
+            """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""" + "\n");
+        var output = new StringWriter();
+
+        await server.RunAsync(input, output);
+
+        var lines = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        Assert.Equal(-32600, Parse(lines[0]).GetProperty("error").GetProperty("code").GetInt32());
+        var toolsList = Parse(lines[1]).GetProperty("result").GetProperty("tools");
+        Assert.Equal(new[] { "remember", "forget" }, toolsList.EnumerateArray().Select(t => t.GetProperty("name").GetString()));
+    }
 }

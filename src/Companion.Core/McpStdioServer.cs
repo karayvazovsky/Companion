@@ -14,7 +14,15 @@ public sealed class McpStdioServer(ToolRegistry tools, string serverName = "comp
         while (await input.ReadLineAsync(ct) is { } line)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            var reply = Handle(line);
+            string? reply;
+            try
+            {
+                reply = Handle(line);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                reply = Error(null, -32603, "Internal error");
+            }
             if (reply is null) continue;
             await output.WriteAsync(reply + "\n");
             await output.FlushAsync(ct);
@@ -27,9 +35,21 @@ public sealed class McpStdioServer(ToolRegistry tools, string serverName = "comp
         try { request = JsonNode.Parse(line); }
         catch (JsonException) { return Error(null, -32700, "Parse error"); }
 
-        var id = request?["id"]?.DeepClone();
+        if (request is not JsonObject obj) return Error(null, -32600, "Invalid Request");
+
+        var id = obj["id"]?.DeepClone();
         if (id is null) return null;   // notification
-        var method = request?["method"]?.GetValue<string>();
+
+        string? method;
+        try
+        {
+            method = obj["method"] is { } methodNode ? methodNode.GetValue<string>() : null;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException or JsonException)
+        {
+            return Error(id, -32600, "Invalid Request");
+        }
+
         try
         {
             return method switch
