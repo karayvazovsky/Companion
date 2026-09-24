@@ -138,8 +138,7 @@ public sealed class PetController : IDisposable
             _screens = _desktop.Screens();
             _window.Topmost = false;   // re-assert z-order; the taskbar sometimes covers topmost windows
             _window.Topmost = true;
-            if (_perch.Kind == PerchKind.Floor && !_held && _fallTargetY is null)
-                SetPerch(PerchPlanner.Fall(_perch.X, Size, _perch.Y, _screens));   // taskbar moved or resolution changed
+            if (!_held && _fallTargetY is null && _overrideAnimation is null) Reperch();   // taskbar moved, monitor unplugged…
         }
         Play(AnimationFor(tick.State));
         if (!_held) _window.SetFacing(tick.State == PetStateKind.Walk && _perch.CanWalk ? _life.WalkDirection : 1);
@@ -221,6 +220,21 @@ public sealed class PetController : IDisposable
             : PerchPlanner.ForDrop(x, y, Size, screens, []));
     }
 
+    /// <summary>
+    /// Re-derives the perch against the current screens and sprite size so it stays on-screen; WindowTop is the follow
+    /// timer's job. Only moves the pet when the result differs (keeps the ceiling swing going).
+    /// </summary>
+    private void Reperch()
+    {
+        var next = _perch.Kind switch
+        {
+            PerchKind.WindowTop => _perch,
+            PerchKind.Floor => PerchPlanner.Fall(_perch.X, Size, _perch.Y, Screens()),
+            _ => PerchPlanner.ForDrop(_perch.X, _perch.Y, Size, Screens(), []),
+        };
+        if (next != _perch) SetPerch(next);
+    }
+
     private void SetPerch(Perch perch)
     {
         _perch = perch;
@@ -277,8 +291,12 @@ public sealed class PetController : IDisposable
         }
         else
         {
+            // Screens or the pet size may have changed while hidden (a fall in progress just lands).
             _window.Show();
+            _screens = _desktop.Screens();
+            Reperch();
             _window.SpritePosition = new Point(_perch.X, _perch.Y);
+            ApplyPose();
         }
         UpdateTimers();
     }
@@ -404,6 +422,7 @@ public sealed class PetController : IDisposable
 
     private void OnClicked()
     {
+        _nextTeleport = DateTime.Now + NextTeleportDelay();
         if (!_petStore.Current.Hatched)
         {
             EggClicked?.Invoke();
@@ -415,6 +434,7 @@ public sealed class PetController : IDisposable
 
     private void OnDragStarted(Point cursor)
     {
+        CancelTeleport();   // grabbed mid-poof: stay in the hand, don't jump to the random perch
         _held = true;
         _fallTargetY = null;
         _pendulum.Reset();
@@ -445,6 +465,7 @@ public sealed class PetController : IDisposable
     {
         if (_disposed) return;   // capture is lost while the window closes
         _held = false;
+        _nextTeleport = DateTime.Now + NextTeleportDelay();   // the user just placed it: don't whisk it away
         _pendulum.Reset();
         var p = _window.SpritePosition;
         _screens = _desktop.Screens();

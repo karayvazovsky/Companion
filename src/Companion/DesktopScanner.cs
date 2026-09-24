@@ -10,6 +10,7 @@ namespace Companion;
 /// <summary>Monitors and visible top-level windows, in WPF device-independent pixels.</summary>
 public sealed class DesktopScanner(Window reference)
 {
+    private static readonly uint OwnProcessId = (uint)Environment.ProcessId;
     private readonly HashSet<IntPtr> _ignored = new();
     private Matrix _fromDevice = Matrix.Identity;
 
@@ -33,7 +34,9 @@ public sealed class DesktopScanner(Window reference)
         {
             if (_ignored.Contains(hwnd) || !NativeMethods.IsWindowVisible(hwnd) || NativeMethods.IsIconic(hwnd)) return true;
             if (NativeMethods.GetWindowTextLength(hwnd) == 0) return true;
-            if ((NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE) & NativeMethods.WS_EX_TOOLWINDOW) != 0) return true;
+            if ((NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE) & (NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_TRANSPARENT)) != 0) return true;
+            NativeMethods.GetWindowThreadProcessId(hwnd, out var processId);
+            if (processId == OwnProcessId) return true;   // our own bubbles and settings are not furniture
             if (NativeMethods.DwmGetWindowAttribute(hwnd, NativeMethods.DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
             if (NativeMethods.DwmGetWindowAttribute(hwnd, NativeMethods.DWMWA_EXTENDED_FRAME_BOUNDS, out NativeMethods.RECT r, Marshal.SizeOf<NativeMethods.RECT>()) != 0) return true;
             if (r.Right - r.Left < 120 || r.Bottom - r.Top < 80) return true;

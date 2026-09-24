@@ -32,13 +32,16 @@ public partial class PetWindow : Window
     /// <summary>Top-left of the sprite square in screen DIPs.</summary>
     public Point SpritePosition
     {
-        get => new(Left + SpriteSize / 2, Top);
+        get => new(Left + SpriteSize / 2, Top + SpriteSize * HeadroomRatio);
         set
         {
             Left = value.X - SpriteSize / 2;
-            Top = value.Y;
+            Top = value.Y - SpriteSize * HeadroomRatio;
         }
     }
+
+    /// <summary>Transparent space above the sprite so a top-pivot swing isn't clipped.</summary>
+    private const double HeadroomRatio = 0.25;
 
     public void SetFrame(ImageSource frame) => Sprite.Source = frame;
 
@@ -51,7 +54,7 @@ public partial class PetWindow : Window
         Sprite.Width = size;
         Sprite.Height = size;
         Canvas.SetLeft(Sprite, size / 2);
-        Canvas.SetTop(Sprite, 0);
+        Canvas.SetTop(Sprite, size * HeadroomRatio);
         Flip.CenterX = size / 2;
         Tilt.CenterX = size / 2;
         SpritePosition = position;

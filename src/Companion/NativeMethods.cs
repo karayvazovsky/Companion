@@ -32,6 +32,7 @@ internal static class NativeMethods
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")] internal static extern bool IsIconic(IntPtr hWnd);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetWindowTextLength(IntPtr hWnd);
+    [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     [DllImport("dwmapi.dll")] internal static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT value, int size);
     [DllImport("dwmapi.dll")] internal static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
 
