@@ -36,13 +36,14 @@ public sealed class AnthropicClaudeClient : IClaudeClient
             .ToList();
         var text = new StringBuilder();
         var usage = new UsageTotals();
+        string? containerId = null;
 
         for (var round = 0; round < MaxRounds; round++)
         {
             BetaMessage message;
             try
             {
-                message = await Tap(_client.Beta.Messages.CreateStreaming(BuildParams(request, messages), ct), handler, text).Aggregate();
+                message = await Tap(_client.Beta.Messages.CreateStreaming(BuildParams(request, messages, containerId), ct), handler, text).Aggregate();
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
@@ -55,6 +56,8 @@ public sealed class AnthropicClaudeClient : IClaudeClient
             if (stop == "max_tokens") return new TurnResult(text.ToString(), TurnStop.MaxTokens, usage);
             if (stop != "tool_use" && stop != "pause_turn") return new TurnResult(text.ToString(), TurnStop.EndTurn, usage);
 
+            // Server tools (web_search's code execution) run in a container; continue in the same one.
+            containerId = message.Container?.ID ?? containerId;
             var (echo, results) = BuildToolRound(message, handler);
             messages.Add(new BetaMessageParam { Role = Role.Assistant, Content = echo });
             if (results.Count > 0) messages.Add(new BetaMessageParam { Role = Role.User, Content = results });
@@ -62,7 +65,7 @@ public sealed class AnthropicClaudeClient : IClaudeClient
         return new TurnResult(text.ToString(), TurnStop.ToolLoopLimit, usage);
     }
 
-    private static MessageCreateParams BuildParams(TurnRequest request, List<BetaMessageParam> messages)
+    internal static MessageCreateParams BuildParams(TurnRequest request, List<BetaMessageParam> messages, string? containerId = null)
     {
         var tools = new List<BetaToolUnion>();
         if (request.WebSearch) tools.Add(new BetaToolUnion(new BetaWebSearchTool20260209 { MaxUses = 3 }));
@@ -76,7 +79,7 @@ public sealed class AnthropicClaudeClient : IClaudeClient
             });
         }
 
-        return new MessageCreateParams
+        var parameters = new MessageCreateParams
         {
             Model = Model,
             MaxTokens = MaxTokens,
@@ -93,6 +96,7 @@ public sealed class AnthropicClaudeClient : IClaudeClient
             Tools = tools,
             Messages = messages,
         };
+        return containerId is null ? parameters : parameters with { Container = containerId };
     }
 
     /// <summary>Forwards text deltas to the UI while the SDK aggregates the full message.</summary>
@@ -119,7 +123,12 @@ public sealed class AnthropicClaudeClient : IClaudeClient
         }
     }
 
-    private static (List<BetaContentBlockParam> Echo, List<BetaContentBlockParam> Results) BuildToolRound(BetaMessage message, ITurnHandler handler)
+    /// <summary>
+    /// Echoes EVERY block of the assistant message (server tool calls and their results included, e.g. the code
+    /// execution web_search uses for filtering) and runs the client tools. Nothing is dropped: an unpaired
+    /// server_tool_use would fail the continuation request.
+    /// </summary>
+    internal static (List<BetaContentBlockParam> Echo, List<BetaContentBlockParam> Results) BuildToolRound(BetaMessage message, ITurnHandler handler)
     {
         var echo = new List<BetaContentBlockParam>();
         var results = new List<BetaContentBlockParam>();
@@ -128,22 +137,21 @@ public sealed class AnthropicClaudeClient : IClaudeClient
             if (block.TryPickText(out var text)) echo.Add(new BetaTextBlockParam { Text = text.Text });
             else if (block.TryPickThinking(out var thinking)) echo.Add(new BetaThinkingBlockParam { Thinking = thinking.Thinking, Signature = thinking.Signature });
             else if (block.TryPickRedactedThinking(out var redacted)) echo.Add(new BetaRedactedThinkingBlockParam { Data = redacted.Data });
-            else if (block.TryPickServerToolUse(out var serverUse)) echo.Add(Convert<BetaServerToolUseBlockParam>(serverUse));
-            else if (block.TryPickWebSearchToolResult(out var searchResult)) echo.Add(Convert<BetaWebSearchToolResultBlockParam>(searchResult));
             else if (block.TryPickToolUse(out var toolUse))
             {
                 echo.Add(new BetaToolUseBlockParam { ID = toolUse.ID, Name = toolUse.Name, Input = toolUse.Input });
                 var outcome = handler.ExecuteTool(toolUse.Name, toolUse.Input);
                 results.Add(new BetaToolResultBlockParam { ToolUseID = toolUse.ID, Content = outcome.Content, IsError = outcome.IsError });
             }
+            else echo.Add(ToParam(block));
         }
         return (echo, results);
     }
 
     // Response blocks and request params share the same wire shape; round-trip through JSON.
-    private static T Convert<T>(object block) =>
-        JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(block, block.GetType()))
-        ?? throw new InvalidOperationException("Could not convert " + block.GetType().Name);
+    private static BetaContentBlockParam ToParam(BetaContentBlock block) =>
+        JsonSerializer.Deserialize<BetaContentBlockParam>(JsonSerializer.Serialize(block))
+        ?? throw new InvalidOperationException("Could not echo a content block: " + JsonSerializer.Serialize(block));
 
     private static UsageTotals ToUsage(BetaMessage message) => new(
         message.Usage.InputTokens,

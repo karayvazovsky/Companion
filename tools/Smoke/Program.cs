@@ -39,6 +39,8 @@ string[] questions =
     "Remember that my favourite colour is teal. Then tell me a one-line joke.",
     "What's my favourite colour?",
     "Search the web: what is the latest stable .NET version? One sentence.",
+    // Search + a client tool in one turn: the tool round must echo every server block (code execution included).
+    "Search the web for today's date in Tokyo, then remember that I asked about Tokyo.",
 ];
 foreach (var question in questions)
 {
