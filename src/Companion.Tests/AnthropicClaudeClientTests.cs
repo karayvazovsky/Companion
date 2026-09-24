@@ -14,6 +14,7 @@ public class AnthropicClaudeClientToolRoundTests
         public List<string> Calls { get; } = new();
         public void OnTextDelta(string text) { }
         public void OnWebSearch() { }
+        public void OnActivity() { }
 
         public ToolOutcome ExecuteTool(string name, IReadOnlyDictionary<string, JsonElement> input)
         {

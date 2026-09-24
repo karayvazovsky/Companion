@@ -60,4 +60,5 @@ sealed class ConsoleListener : IBrainListener
     public void OnFirstText() { }
     public void OnText(string delta) => Console.Write(delta);
     public void OnStatus(string status) => Console.Write($"({status}) ");
+    public void OnActivity() { }
 }

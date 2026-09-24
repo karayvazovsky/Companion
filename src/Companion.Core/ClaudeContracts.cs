@@ -16,6 +16,10 @@ public interface ITurnHandler
 {
     void OnTextDelta(string text);
     void OnWebSearch();
+
+    /// <summary>Called for every streamed event (thinking, pings, block starts/stops, ...). Must be cheap.</summary>
+    void OnActivity();
+
     ToolOutcome ExecuteTool(string name, IReadOnlyDictionary<string, JsonElement> input);
 }
 

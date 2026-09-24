@@ -33,6 +33,7 @@ public class BrainTests
         public void OnFirstText() => Events.Add("first");
         public void OnText(string delta) => Events.Add("text:" + delta);
         public void OnStatus(string status) => Events.Add("status:" + status);
+        public void OnActivity() => Events.Add("activity");
     }
 
     private sealed class Rig : IDisposable
@@ -128,6 +129,23 @@ public class BrainTests
         Assert.Equal(3, rig.Claude.Requests[1].Messages.Count);
         Assert.Empty(rig.Memory.Facts);
         Assert.Equal(2, rig.PromptBuilds);
+    }
+
+    [Fact]
+    public async Task Stream_activity_from_the_client_reaches_the_listener()
+    {
+        using var rig = new Rig();
+        rig.Claude.Behavior = (_, handler) =>
+        {
+            handler.OnActivity(); // e.g. a thinking delta: no text yet
+            handler.OnActivity();
+            handler.OnTextDelta("ok");
+            return new TurnResult("ok", TurnStop.EndTurn, new UsageTotals(10, 1, 0, 0, 0));
+        };
+
+        await rig.Brain.ThinkHarderAsync(rig.Listener);
+
+        Assert.Equal(new[] { "thinking", "activity", "activity", "first", "text:ok" }, rig.Listener.Events);
     }
 
     [Fact]

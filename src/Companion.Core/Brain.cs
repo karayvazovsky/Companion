@@ -10,6 +10,9 @@ public interface IBrainListener
     void OnFirstText();
     void OnText(string delta);
     void OnStatus(string status);
+
+    /// <summary>Any streamed event arrived (possibly very often, from a background thread). Must be cheap.</summary>
+    void OnActivity();
 }
 
 public enum BrainOutcome { Ok, Refused, CutOff, CapReached, Error }
@@ -141,6 +144,8 @@ public sealed class Brain(
         }
 
         public void OnWebSearch() => listener.OnStatus("searching the web…");
+
+        public void OnActivity() => listener.OnActivity();
 
         public ToolOutcome ExecuteTool(string name, IReadOnlyDictionary<string, JsonElement> input) => tools.Execute(name, input);
     }

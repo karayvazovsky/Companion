@@ -107,6 +107,7 @@ public sealed class AnthropicClaudeClient : IClaudeClient
         var firstTextThisRound = true;
         await foreach (var ev in source.WithCancellation(ct))
         {
+            handler.OnActivity();
             if (ev.TryPickContentBlockDelta(out var delta) && delta.Delta.TryPickText(out var t))
             {
                 var piece = t.Text;

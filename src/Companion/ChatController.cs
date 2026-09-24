@@ -18,6 +18,8 @@ public sealed class ChatController : IBrainListener
     private readonly DispatcherTimer _stallTimer;
     private readonly StringBuilder _answer = new();
     private CancellationTokenSource? _turnCts;
+    private const long ActivityForwardIntervalMs = 1000;
+    private long _lastActivityForwarded; // Environment.TickCount64 of the last OnActivity sent to the UI thread
     private string? _question;
     private string? _notice;
     private bool _dirty;
@@ -252,6 +254,19 @@ public sealed class ChatController : IBrainListener
         _bubble.SetStatus(status);
         RestartStallWatch();
     });
+
+    /// <summary>
+    /// Every streamed event (thinking, pings, block starts/stops) proves the stream is alive. Arrives on a
+    /// background thread, possibly thousands of times, so it is marshalled to the UI at most once per second.
+    /// </summary>
+    public void OnActivity()
+    {
+        var now = Environment.TickCount64;
+        var last = Interlocked.Read(ref _lastActivityForwarded);
+        if (now - last < ActivityForwardIntervalMs) return;
+        if (Interlocked.CompareExchange(ref _lastActivityForwarded, now, last) != last) return;
+        _ui.InvokeAsync(RestartStallWatch);
+    }
 
     /// <summary>Any sign of life from the stream pushes the stall watchdog back. UI thread only.</summary>
     private void RestartStallWatch()
