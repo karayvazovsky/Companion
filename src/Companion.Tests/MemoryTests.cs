@@ -158,10 +158,14 @@ public class PetStateStoreTests
         store.Current.PetName = "Pip";
         store.Current.Hatched = true;
         store.Current.PositionX = 512;
+        store.Current.Perch = PerchKind.Ceiling;
+        store.Current.PositionY = 3;
         store.Save();
         var reloaded = new PetStateStore(path, FakeClock.At(2026, 9, 24, 12), NullLog.Instance);
         Assert.Equal("Pip", reloaded.Current.PetName);
         Assert.Equal(512, reloaded.Current.PositionX);
+        Assert.Equal(PerchKind.Ceiling, reloaded.Current.Perch);
+        Assert.Equal(3, reloaded.Current.PositionY);
 
         var sameInstance = reloaded.Current;
         reloaded.Reset();
@@ -169,5 +173,7 @@ public class PetStateStoreTests
         Assert.Null(reloaded.Current.PetName);
         Assert.False(reloaded.Current.Hatched);
         Assert.Null(reloaded.Current.PositionX);
+        Assert.Equal(PerchKind.Floor, reloaded.Current.Perch);
+        Assert.Null(reloaded.Current.PositionY);
     }
 }

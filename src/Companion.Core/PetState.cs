@@ -8,6 +8,8 @@ public sealed class PetState
     public double Attention { get; set; } = 80;
     public double Energy { get; set; } = 80;
     public double? PositionX { get; set; }
+    public double? PositionY { get; set; }
+    public PerchKind Perch { get; set; } = PerchKind.Floor;
 }
 
 public sealed class PetStateStore
@@ -34,6 +36,8 @@ public sealed class PetStateStore
         Current.Attention = fresh.Attention;
         Current.Energy = fresh.Energy;
         Current.PositionX = fresh.PositionX;
+        Current.PositionY = fresh.PositionY;
+        Current.Perch = fresh.Perch;
         Save();
     }
 }
