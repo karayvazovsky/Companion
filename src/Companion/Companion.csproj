@@ -17,5 +17,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Companion.Core\Companion.Core.csproj" />
+    <ProjectReference Include="..\Companion.Memory\Companion.Memory.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>
