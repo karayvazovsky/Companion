@@ -65,7 +65,7 @@ public sealed class AppHost : IDisposable
         _tray.QuitClicked += () => QuitRequested?.Invoke();
         _hotkey.Pressed += OnChatRequested;
         _chat.OnboardingCompleted += () => { RebuildBrain(); UpdateTooltip(); };
-        _chat.TurnFinished += () => { if (_settings.Current.Brain == BrainKind.Subscription) _memory.Reload(); UpdateTooltip(); };
+        _chat.TurnFinished += OnTurnFinished;
         _bubble.IsVisibleChanged += (_, e) => { if (e.NewValue is false) _trim.Request(); };
         _line.Hidden += _trim.Request;
         _pet.InteractionEnded += _trim.Request;
@@ -99,6 +99,23 @@ public sealed class AppHost : IDisposable
         _activity.Dispose();
         _line.Close();
         _trim.Dispose();
+    }
+
+    /// <summary>With the subscription brain, Companion.Memory.exe may have changed memory.json during the turn.</summary>
+    private void OnTurnFinished()
+    {
+        if (_settings.Current.Brain == BrainKind.Subscription)
+        {
+            try
+            {
+                _memory.Reload();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _log.Error("Couldn't reload memory after the turn.", ex);
+            }
+        }
+        UpdateTooltip();
     }
 
     private void Hatch()
