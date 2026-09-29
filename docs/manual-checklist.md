@@ -28,3 +28,18 @@ Run after any change to the app project. Start `app\Companion.exe` (or `dotnet r
 
 ## Footprint
 - [ ] `tools\measure-footprint.ps1` after 1 idle minute: PASS.
+
+## v1.1 — Subscription brain
+- [ ] Settings → Brain = Subscription (default); a question answers without any API key; tooltip says "Claude subscription".
+- [ ] "Remember that …" then Settings shows the fact; "forget …" removes it (via the MCP memory server).
+- [ ] Claude Code logged out → the bubble says to run `claude` and log in. Plan limit → message with reset time.
+- [ ] Brain = ApiKey still works with a key and the cap applies.
+
+## v1.1 — Movement
+- [ ] Drag: the pet dangles from the cursor and swings with motion; stops swinging when the mouse stops.
+- [ ] Drop near floor / left wall / right wall / ceiling / a window's top edge snaps there; elsewhere it stays put.
+- [ ] Walls: clings with arms toward the wall. Ceiling: hangs and swings gently.
+- [ ] On a window: moves with the window; minimise/close the window → it falls to the floor.
+- [ ] Right-click → Teleport: poof, reappears elsewhere (also on the second monitor); happens on its own every 5–15 min when idle (toggle in Settings).
+- [ ] Chat bubble opens below the pet when it hangs from the ceiling; stays on the pet's monitor.
+- [ ] Footprint still PASS when idle on the floor; CPU stays low while hanging from the ceiling.
