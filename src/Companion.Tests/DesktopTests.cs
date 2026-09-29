@@ -117,6 +117,52 @@ public class DesktopTests
     }
 
     [Fact]
+    public void Random_never_perches_on_a_window_hidden_behind_a_front_window()
+    {
+        // A maximised window (topmost first) hides the editor entirely; it is itself too high to perch on.
+        var maximized = new DesktopWindow(7, new RectD(0, 0, 1920, 1040));
+        var rng = new Random(5);
+        for (var i = 0; i < 400; i++)
+            Assert.NotEqual(PerchKind.WindowTop, PerchPlanner.Random(rng, Size, [Primary], [maximized, Editor]).Kind);
+    }
+
+    [Fact]
+    public void Random_perches_only_on_the_visible_part_of_a_partly_covered_window()
+    {
+        // The front window covers the editor's top edge from x 0 to 900: only 900..1300 is visible.
+        var front = new DesktopWindow(10, new RectD(0, 100, 900, 900));
+        var rng = new Random(11);
+        var onEditor = 0;
+        for (var i = 0; i < 400; i++)
+        {
+            var perch = PerchPlanner.Random(rng, Size, [Primary], [front, Editor]);
+            if (perch.Kind != PerchKind.WindowTop || perch.WindowHandle != Editor.Handle) continue;
+            onEditor++;
+            Assert.InRange(perch.X, 900, 1300 - Size);
+            Assert.Equal(perch.X - 500, perch.OffsetX, 6);
+        }
+        Assert.True(onEditor > 0);
+
+        // A visible strip narrower than the pet is skipped.
+        var almostCovering = new DesktopWindow(10, new RectD(0, 100, 1250, 900));
+        for (var i = 0; i < 400; i++)
+            Assert.NotEqual(Editor.Handle, PerchPlanner.Random(rng, Size, [Primary], [almostCovering, Editor]).WindowHandle);
+    }
+
+    [Fact]
+    public void Follow_falls_when_a_front_window_covers_the_perch()
+    {
+        var perch = new Perch(PerchKind.WindowTop, 700, 236, 42, 200);
+        var coveringFront = new DesktopWindow(10, new RectD(600, 200, 400, 400));
+        Assert.Null(PerchPlanner.Follow(perch, Size, Screens, [coveringFront, Editor]));
+
+        // A front window beside the perch point doesn't matter, nor does one behind the editor.
+        var besideFront = new DesktopWindow(11, new RectD(1000, 200, 300, 400));
+        Assert.Equal(perch, PerchPlanner.Follow(perch, Size, Screens, [besideFront, Editor]));
+        Assert.Equal(perch, PerchPlanner.Follow(perch, Size, Screens, [Editor, coveringFront]));
+    }
+
+    [Fact]
     public void Pendulum_lags_behind_motion_clamps_and_settles()
     {
         var pendulum = new Pendulum();

@@ -82,13 +82,20 @@ public static class PerchPlanner
         var wa = screens[rng.Next(screens.Count)].WorkArea;
         double RandomX() => wa.Left + rng.NextDouble() * Math.Max(0, wa.Width - size);
         double RandomY() => wa.Top + rng.NextDouble() * Math.Max(0, wa.Height - size);
-        var tops = windows.Where(w => Perchable(w, wa, size) && w.Bounds.Left >= wa.Left - 1 && w.Bounds.Right <= wa.Right + 1).ToList();
+        var tops = new List<(DesktopWindow Window, double From, double To)>();
+        for (var i = 0; i < windows.Count; i++)
+        {
+            var w = windows[i];
+            if (!Perchable(w, wa, size) || w.Bounds.Left < wa.Left - 1 || w.Bounds.Right > wa.Right + 1) continue;
+            foreach (var (from, to) in VisibleTopSpans(windows, i))
+                if (to - from >= size) tops.Add((w, from, to));
+        }
 
         var roll = rng.NextDouble();
         if (roll < 0.25 && tops.Count > 0)
         {
-            var w = tops[rng.Next(tops.Count)];
-            var px = w.Bounds.Left + rng.NextDouble() * (w.Bounds.Width - size);
+            var (w, from, to) = tops[rng.Next(tops.Count)];
+            var px = from + rng.NextDouble() * (to - from - size);
             return new Perch(PerchKind.WindowTop, px, w.Bounds.Top - size, w.Handle, px - w.Bounds.Left);
         }
         if (roll < 0.40) return new Perch(PerchKind.Ceiling, RandomX(), wa.Top);
@@ -101,11 +108,16 @@ public static class PerchPlanner
     public static Perch? Follow(Perch perch, double size, IReadOnlyList<ScreenArea> screens, IReadOnlyList<DesktopWindow> windows)
     {
         if (perch.Kind != PerchKind.WindowTop) return perch;
-        var window = windows.FirstOrDefault(w => w.Handle == perch.WindowHandle);
-        if (window is null) return null;
+        var index = -1;
+        for (var i = 0; i < windows.Count && index < 0; i++)
+            if (windows[i].Handle == perch.WindowHandle) index = i;
+        if (index < 0) return null;
+        var window = windows[index];
         var b = window.Bounds;
         if (!Perchable(window, ScreenFor(b.CenterX, b.Top, screens).WorkArea, size)) return null;
         var px = Math.Clamp(b.Left + perch.OffsetX, b.Left, b.Right - size);
+        for (var i = 0; i < index; i++)
+            if (windows[i].Bounds.Contains(px + size / 2, b.Top - 1)) return null;   // a window in front now hides the perch
         return perch with { X = px, Y = b.Top - size, OffsetX = px - b.Left };
     }
 
@@ -121,6 +133,31 @@ public static class PerchPlanner
             return (window.Bounds.Left, window.Bounds.Right - size);
         var wa = ScreenFor(perch.X + size / 2, perch.Y + size / 2, screens).WorkArea;
         return (wa.Left, Math.Max(wa.Left, wa.Right - size));
+    }
+
+    /// <summary>
+    /// The stretches of windows[index]'s top edge (sampled just above it, at Top - 1) not hidden by a window in front
+    /// of it (earlier in the topmost-first list). A teleport only lands where the whole pet stands on a visible stretch.
+    /// </summary>
+    private static List<(double From, double To)> VisibleTopSpans(IReadOnlyList<DesktopWindow> windows, int index)
+    {
+        var b = windows[index].Bounds;
+        var y = b.Top - 1;
+        var spans = new List<(double From, double To)> { (b.Left, b.Right) };
+        for (var i = 0; i < index && spans.Count > 0; i++)
+        {
+            var front = windows[i].Bounds;
+            if (y < front.Top || y >= front.Bottom) continue;
+            var next = new List<(double From, double To)>();
+            foreach (var (from, to) in spans)
+            {
+                if (front.Right <= from || front.Left >= to) { next.Add((from, to)); continue; }
+                if (front.Left > from) next.Add((from, front.Left));
+                if (front.Right < to) next.Add((front.Right, to));
+            }
+            spans = next;
+        }
+        return spans;
     }
 
     private static bool Perchable(DesktopWindow window, RectD workArea, double size) =>
