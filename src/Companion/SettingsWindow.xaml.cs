@@ -23,8 +23,8 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         _deps = deps;
         BrainBox.ItemsSource = Enum.GetValues<BrainKind>();
-        EverydayModelBox.ItemsSource = new[] { "claude-sonnet-5", "claude-opus-5-5", "claude-haiku-4-5" };
-        HarderModelBox.ItemsSource = new[] { "claude-sonnet-5", "claude-opus-5-5", "claude-haiku-4-5" };
+        EverydayModelBox.ItemsSource = new[] { "claude-sonnet-5", "opus", "claude-opus-5-5", "claude-haiku-4-5" };
+        HarderModelBox.ItemsSource = new[] { "opus", "claude-opus-5-5", "claude-sonnet-5", "claude-haiku-4-5" };
         EverydayBox.ItemsSource = Enum.GetValues<EffortLevel>();
         HarderBox.ItemsSource = Enum.GetValues<EffortLevel>();
         ScaleBox.ItemsSource = new[] { 3, 4, 6 };

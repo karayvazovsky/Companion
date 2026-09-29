@@ -16,7 +16,8 @@ public sealed class AppSettings
     /// <summary>Where answers come from: the user's Claude subscription via Claude Code (default) or a paid API key.</summary>
     public BrainKind Brain { get; set; } = BrainKind.Subscription;
     public string SubscriptionEverydayModel { get; set; } = "claude-sonnet-5";
-    public string SubscriptionThinkHarderModel { get; set; } = "claude-opus-5-5";
+    /// <summary>Claude Code's "opus" alias: Claude Code 2.1.252 does not recognise the id claude-opus-5-5.</summary>
+    public string SubscriptionThinkHarderModel { get; set; } = "opus";
     /// <summary>Optional full path to claude.exe; empty means auto-detect.</summary>
     public string? ClaudeCodePath { get; set; }
     public bool AutoTeleport { get; set; } = true;
@@ -57,7 +58,7 @@ public sealed class SettingsStore
         if (string.IsNullOrWhiteSpace(Current.Hotkey)) Current.Hotkey = "Ctrl+Alt+Space";
         Current.SpendByMonth ??= new();
         if (string.IsNullOrWhiteSpace(Current.SubscriptionEverydayModel)) Current.SubscriptionEverydayModel = "claude-sonnet-5";
-        if (string.IsNullOrWhiteSpace(Current.SubscriptionThinkHarderModel)) Current.SubscriptionThinkHarderModel = "claude-opus-5-5";
+        if (string.IsNullOrWhiteSpace(Current.SubscriptionThinkHarderModel)) Current.SubscriptionThinkHarderModel = "opus";
         Current.SubscriptionEverydayModel = Current.SubscriptionEverydayModel.Trim();
         Current.SubscriptionThinkHarderModel = Current.SubscriptionThinkHarderModel.Trim();
     }

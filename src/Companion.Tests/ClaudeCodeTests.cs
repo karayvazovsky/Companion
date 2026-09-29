@@ -120,6 +120,33 @@ public class ClaudeCodeTests
         Assert.Equal(expected, parser.ToFailure("").Kind);
     }
 
+    [Theory]
+    [InlineData("There's an issue with the selected model (claude-opus-5-5). It may not exist or you may not have access to it. Run /model to pick a different model.", "")]
+    [InlineData("API Error: 404 {\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"model: claude-opus-5-5\"}}", "")]
+    [InlineData("something odd", "[claude-code:unrecognized_model] {\"model\":\"claude-opus-5-5\",\"query_source\":\"sdk\"}")]
+    public void An_unusable_model_asks_the_user_to_pick_another(string result, string stderr)
+    {
+        var parser = new ClaudeCodeStreamParser(new RecordingHandler());
+        parser.Feed(Result(isError: true, result: result));
+
+        var failure = parser.ToFailure(stderr, "claude-opus-5-5");
+
+        Assert.Equal(ClaudeErrorKind.BadRequest, failure.Kind);
+        Assert.Equal("I can't use the model claude-opus-5-5. Pick another in Settings.", failure.UserMessage);
+    }
+
+    [Fact]
+    public void An_expired_login_wins_over_an_unrecognised_model_note()
+    {
+        // Claude Code 2.1.252, verbatim: an expired OAuth login with an unknown model id.
+        var parser = new ClaudeCodeStreamParser(new RecordingHandler());
+        parser.Feed(Result(isError: true, result: "Failed to authenticate: OAuth session expired and could not be refreshed"));
+
+        var failure = parser.ToFailure("[claude-code:unrecognized_model] {\"model\":\"claude-opus-5-5\",\"query_source\":\"sdk\"}", "claude-opus-5-5");
+
+        Assert.Equal(ClaudeErrorKind.NotLoggedIn, failure.Kind);
+    }
+
     [Fact]
     public void A_retried_401_that_then_succeeds_is_not_a_failure()
     {

@@ -63,6 +63,7 @@ public sealed partial class ClaudeCodeStreamParser(ITurnHandler handler)
 {
     private static readonly string[] PlanLimitText = ["hit your limit", "limit reached", "usage limit", "rate limit"];
     private static readonly Regex ServerErrorText = ServerErrorRegex();
+    private static readonly string[] ModelProblemText = ["unrecognized_model", "selected model", "invalid model", "model not found", "model_not_found"];
     private readonly StringBuilder _text = new();
     private bool _firstTextThisMessage = true;
 
@@ -120,7 +121,7 @@ public sealed partial class ClaudeCodeStreamParser(ITurnHandler handler)
     }
 
     /// <summary>Turns a failed or unfinished run into a ClaudeException with a user-facing message.</summary>
-    public ClaudeException ToFailure(string stderr)
+    public ClaudeException ToFailure(string stderr, string? model = null)
     {
         var detail = string.Join(" | ", new[] { ResultText, LastApiError, stderr.Trim() }.Where(s => !string.IsNullOrWhiteSpace(s)));
         if (detail.Length == 0) detail = "Claude Code exited without an answer.";
@@ -129,12 +130,18 @@ public sealed partial class ClaudeCodeStreamParser(ITurnHandler handler)
             var when = LimitResetsAt is { } at ? $" It resets at {at.ToLocalTime():HH:mm}." : "";
             return new ClaudeException(ClaudeErrorKind.PlanLimit, detail, userMessage: $"You've reached your Claude plan's usage limit.{when}");
         }
-        if (Has(detail, "/login") || Has(detail, "not logged in") || Has(detail, "authentication") || (!Finished && LastApiErrorStatus == 401))
+        if (Has(detail, "/login") || Has(detail, "not logged in") || Has(detail, "authentication") || Has(detail, "failed to authenticate")
+            || (!Finished && LastApiErrorStatus == 401))
             return new ClaudeException(ClaudeErrorKind.NotLoggedIn, detail);
         if (Has(detail, "connection error") || Has(detail, "ENOTFOUND") || Has(detail, "ECONNREFUSED") || Has(detail, "network"))
             return new ClaudeException(ClaudeErrorKind.Network, detail);
         if (LastApiErrorStatus >= 500 || Has(detail, "overloaded") || ServerErrorText.IsMatch(detail))
             return new ClaudeException(ClaudeErrorKind.Server, detail);
+        if (ModelProblemText.Any(part => Has(detail, part)) || (Has(detail, "not_found_error") && Has(detail, "model")))
+        {
+            var which = string.IsNullOrWhiteSpace(model) ? "that model" : $"the model {model}";
+            return new ClaudeException(ClaudeErrorKind.BadRequest, detail, userMessage: $"I can't use {which}. Pick another in Settings.");
+        }
         return new ClaudeException(ClaudeErrorKind.Unknown, detail);
     }
 
@@ -231,13 +238,16 @@ public sealed class ClaudeCodeClient(ClaudeCodeOptions options) : IClaudeClient
         }
 
         var stderr = await stderrTask;
-        if (!parser.Finished || parser.IsError) throw parser.ToFailure(stderr);
+        if (!parser.Finished || parser.IsError) throw parser.ToFailure(stderr, ModelFor(request, options));
         return new TurnResult(parser.Text, parser.Stop, new UsageTotals());
     }
 
+    internal static string ModelFor(TurnRequest request, ClaudeCodeOptions options) =>
+        request.Effort == EffortLevel.High ? options.ThinkHarderModel : options.EverydayModel;
+
     internal static IReadOnlyList<string> BuildArguments(TurnRequest request, ClaudeCodeOptions options)
     {
-        var model = request.Effort == EffortLevel.High ? options.ThinkHarderModel : options.EverydayModel;
+        var model = ModelFor(request, options);
         var args = new List<string>
         {
             "-p",
