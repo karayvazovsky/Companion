@@ -5,7 +5,7 @@ using Companion.Core;
 namespace Companion;
 
 /// <summary>Connects the bubble to the Brain and the pet. Brain callbacks arrive on background threads.</summary>
-public sealed class ChatController : IBrainListener
+public sealed class ChatController : IBrainListener, IDisposable
 {
     private readonly ChatBubble _bubble;
     private readonly PetController _pet;
@@ -26,6 +26,7 @@ public sealed class ChatController : IBrainListener
     private bool _dirty;
     private bool _canThinkHarder;
     private OnboardingFlow? _onboarding;
+    private bool _disposed;
 
     public ChatController(ChatBubble bubble, PetController pet, Func<Brain?> brain, Func<string> petName, Func<string> noBrainMessage, ILog log)
     {
@@ -66,6 +67,20 @@ public sealed class ChatController : IBrainListener
     public event Action? TurnFinished;
 
     public bool IsOpen => _bubble.IsVisible;
+
+    /// <summary>
+    /// On quit: cancels a running turn. The cancel callback kills claude.exe's process tree (with its
+    /// Companion.Memory.exe) synchronously, so nothing outlives the app.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _renderTimer.Stop();
+        _slowTimer.Stop();
+        _stallTimer.Stop();
+        _turnCts?.Cancel();
+    }
 
     public void Toggle()
     {
@@ -210,6 +225,7 @@ public sealed class ChatController : IBrainListener
             _bubble.SetBusy(false);
             _bubble.SetStatus(null);
         }
+        if (_disposed) return;
 
         _answer.Clear().Append(reply.Text);
         _notice = reply.Notice;

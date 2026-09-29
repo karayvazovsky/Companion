@@ -89,6 +89,7 @@ public sealed class AppHost : IDisposable
 
     public void Dispose()
     {
+        _chat.Dispose();   // first: stop a running turn so claude.exe / Companion.Memory.exe don't linger
         _tooltipTimer.Stop();
         _settingsWindow?.Close();
         _hotkey.Dispose();
