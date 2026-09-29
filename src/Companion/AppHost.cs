@@ -24,7 +24,7 @@ public sealed class AppHost : IDisposable
     private readonly LineBubble _line = new();
     private readonly ChatBubble _bubble = new();
     private readonly ChatController _chat;
-    private readonly TrimScheduler _trim = new();
+    private readonly TrimScheduler _trim;
     private readonly DispatcherTimer _tooltipTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private Brain? _brain;
     private SettingsWindow? _settingsWindow;
@@ -48,6 +48,7 @@ public sealed class AppHost : IDisposable
         var sheet = LoadSheet(Path.Combine(paths.Skins, "default"));
         _pet = new PetController(new PetWindow(), new PetLife(_petStore.Current, clock, new Random()), sheet, _activity, _settings, _petStore,
             () => _chat?.IsOpen == true || _brain?.Busy == true);   // _chat is assigned right after
+        _trim = new TrimScheduler(() => _bubble.IsVisible || _pet.IsBusyMoving);
         _tray = new TrayIcon(sheet.Frame(0));
         _chat = new ChatController(_bubble, _pet, () => _brain, () => PetName, () => _noBrainMessage, log);
 
@@ -84,19 +85,11 @@ public sealed class AppHost : IDisposable
         _tooltipTimer.Start();
         UpdateTooltip();
         _trim.Start();
-        var startupTrim = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
-        startupTrim.Tick += (_, _) =>
-        {
-            startupTrim.Stop();
-            _trim.Request();
-        };
-        startupTrim.Start();
     }
 
     public void Dispose()
     {
         _tooltipTimer.Stop();
-        _trim.Dispose();
         _settingsWindow?.Close();
         _hotkey.Dispose();
         _bubble.Close();
@@ -104,6 +97,7 @@ public sealed class AppHost : IDisposable
         _tray.Dispose();
         _activity.Dispose();
         _line.Close();
+        _trim.Dispose();
     }
 
     private void Hatch()

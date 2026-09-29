@@ -88,6 +88,9 @@ public sealed class PetController : IDisposable
     /// <summary>Raised when a menu closes, a drag ends or a teleport finishes (the app may want to give memory back).</summary>
     public event Action? InteractionEnded;
 
+    /// <summary>True while held, falling or mid-teleport (the app should not do housekeeping now).</summary>
+    public bool IsBusyMoving => _held || _fallTargetY is not null || _overrideAnimation is not null;
+
     public PetLife Life => _life;
 
     public Window Window => _window;
