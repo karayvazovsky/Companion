@@ -21,6 +21,7 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add("Settings", null, (_, _) => SettingsClicked?.Invoke());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => QuitClicked?.Invoke());
+        menu.Closed += (_, _) => MenuClosed?.Invoke();
         _icon = new Forms.NotifyIcon { Icon = _image, Text = "Companion", Visible = true, ContextMenuStrip = menu };
         _icon.DoubleClick += (_, _) => ChatClicked?.Invoke();
     }
@@ -31,6 +32,7 @@ public sealed class TrayIcon : IDisposable
     public event Action? SleepClicked;
     public event Action? SettingsClicked;
     public event Action? QuitClicked;
+    public event Action? MenuClosed;
 
     public void SetTooltip(string text) => _icon.Text = text.Length <= 127 ? text : text[..127];
 

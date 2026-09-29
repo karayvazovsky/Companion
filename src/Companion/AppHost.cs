@@ -24,6 +24,7 @@ public sealed class AppHost : IDisposable
     private readonly LineBubble _line = new();
     private readonly ChatBubble _bubble = new();
     private readonly ChatController _chat;
+    private readonly TrimScheduler _trim = new();
     private readonly DispatcherTimer _tooltipTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private Brain? _brain;
     private SettingsWindow? _settingsWindow;
@@ -64,7 +65,10 @@ public sealed class AppHost : IDisposable
         _hotkey.Pressed += OnChatRequested;
         _chat.OnboardingCompleted += () => { RebuildBrain(); UpdateTooltip(); };
         _chat.TurnFinished += () => { if (_settings.Current.Brain == BrainKind.Subscription) _memory.Reload(); UpdateTooltip(); };
-        _bubble.IsVisibleChanged += (_, e) => { if (e.NewValue is false) MemoryTrim.Now(); };
+        _bubble.IsVisibleChanged += (_, e) => { if (e.NewValue is false) _trim.Request(); };
+        _line.Hidden += _trim.Request;
+        _pet.InteractionEnded += _trim.Request;
+        _tray.MenuClosed += _trim.Request;
         _tooltipTimer.Tick += (_, _) => { if (_rebuildPending) RebuildBrain(); UpdateTooltip(); };
         RebuildBrain();
     }
@@ -79,18 +83,20 @@ public sealed class AppHost : IDisposable
         RegisterHotkey();
         _tooltipTimer.Start();
         UpdateTooltip();
-        var trim = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
-        trim.Tick += (_, _) =>
+        _trim.Start();
+        var startupTrim = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        startupTrim.Tick += (_, _) =>
         {
-            trim.Stop();
-            MemoryTrim.Now();
+            startupTrim.Stop();
+            _trim.Request();
         };
-        trim.Start();
+        startupTrim.Start();
     }
 
     public void Dispose()
     {
         _tooltipTimer.Stop();
+        _trim.Dispose();
         _settingsWindow?.Close();
         _hotkey.Dispose();
         _bubble.Close();
@@ -129,7 +135,11 @@ public sealed class AppHost : IDisposable
             (key, ct) => new AnthropicClaudeClient(key).ValidateKeyAsync(ct),
             ApplySettings,
             ResetPet));
-        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Closed += (_, _) =>
+        {
+            _settingsWindow = null;
+            _trim.Request();
+        };
         _settingsWindow.Show();
     }
 

@@ -16,8 +16,12 @@ public partial class LineBubble : Window
         {
             _timer.Stop();
             Hide();
+            Hidden?.Invoke();
         };
     }
+
+    /// <summary>Raised after the bubble has timed out and hidden itself.</summary>
+    public event Action? Hidden;
 
     /// <summary>Shows the line above the pet (<paramref name="anchor"/>), or below it when its monitor has no room above.</summary>
     public void Say(string text, Rect anchor, Rect area)

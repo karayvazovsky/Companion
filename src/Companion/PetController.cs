@@ -85,6 +85,9 @@ public sealed class PetController : IDisposable
     public event Action? QuitRequested;
     public event Action<string>? LineReady;
 
+    /// <summary>Raised when a menu closes, a drag ends or a teleport finishes (the app may want to give memory back).</summary>
+    public event Action? InteractionEnded;
+
     public PetLife Life => _life;
 
     public Window Window => _window;
@@ -182,6 +185,7 @@ public sealed class PetController : IDisposable
             {
                 _overrideAnimation = null;
                 Refresh();
+                InteractionEnded?.Invoke();
             });
         });
     }
@@ -472,6 +476,7 @@ public sealed class PetController : IDisposable
         _windows = _desktop.Windows();
         SetPerch(PerchPlanner.ForDrop(p.X, p.Y, Size, _screens, _windows));
         Refresh();
+        InteractionEnded?.Invoke();
     }
 
     private void MaybeAutoTeleport(PetStateKind state, ActivitySnapshot activity)
@@ -511,6 +516,7 @@ public sealed class PetController : IDisposable
     private ContextMenu BuildMenu()
     {
         var menu = new ContextMenu();
+        menu.Closed += (_, _) => InteractionEnded?.Invoke();
         menu.Items.Add(Item("Chat", () => ChatRequested?.Invoke()));
         menu.Items.Add(Item("Teleport", Teleport));
         menu.Items.Add(Item("Sleep", () => { _life.ForceSleep(); Refresh(); }));
