@@ -195,6 +195,67 @@ public class ClaudeCodeTests
     }
 
     [Fact]
+    public void Start_info_runs_claude_directly_in_the_workspace()
+    {
+        var options = new ClaudeCodeOptions(@"C:\c\claude.exe", "claude-sonnet-5", "opus", null, @"D:\data\memory.json", @"D:\ws");
+        var request = new TurnRequest("You are Pip.", [new HistoryMessage(true, "hi")], EffortLevel.Low, [], WebSearch: false);
+
+        var start = ClaudeCodeClient.CreateStartInfo(request, options);
+
+        Assert.Equal(@"C:\c\claude.exe", start.FileName);
+        Assert.False(start.UseShellExecute);
+        Assert.True(start.CreateNoWindow);
+        Assert.True(start.RedirectStandardInput && start.RedirectStandardOutput && start.RedirectStandardError);
+        Assert.Equal(@"D:\ws", start.WorkingDirectory);
+        Assert.Equal(ClaudeCodeClient.BuildArguments(request, options), start.ArgumentList);
+        Assert.False(start.Environment.ContainsKey("ANTHROPIC_API_KEY"));
+        Assert.False(start.Environment.ContainsKey("ANTHROPIC_AUTH_TOKEN"));
+    }
+
+    [Fact]
+    public void Api_credentials_are_scrubbed_so_the_subscription_login_is_used()
+    {
+        var environment = new Dictionary<string, string?>
+        {
+            ["ANTHROPIC_API_KEY"] = "sk-ant-test",
+            ["ANTHROPIC_AUTH_TOKEN"] = "token",
+            ["PATH"] = @"C:\Windows",
+        };
+
+        ClaudeCodeClient.ScrubEnvironment(environment);
+
+        Assert.Equal(new[] { "PATH" }, environment.Keys);
+    }
+
+    [Theory]
+    [InlineData(2, ClaudeErrorKind.NotInstalled)]
+    [InlineData(3, ClaudeErrorKind.NotInstalled)]
+    [InlineData(5, ClaudeErrorKind.Unknown)]
+    [InlineData(193, ClaudeErrorKind.Unknown)]
+    public void Only_a_missing_exe_counts_as_not_installed(int nativeError, ClaudeErrorKind expected)
+    {
+        var error = new System.ComponentModel.Win32Exception(nativeError);
+
+        var failure = ClaudeCodeClient.StartFailure(error);
+
+        Assert.Equal(expected, failure.Kind);
+        Assert.Equal(error.Message, failure.Message);
+        Assert.Same(error, failure.InnerException);
+    }
+
+    [Fact]
+    public async Task A_missing_claude_exe_is_not_installed()
+    {
+        using var tmp = new TempDir();
+        var options = new ClaudeCodeOptions(tmp.PathOf("claude.exe"), "claude-sonnet-5", "opus", null, tmp.PathOf("memory.json"), tmp.PathOf("ws"));
+        var request = new TurnRequest("You are Pip.", [new HistoryMessage(true, "hi")], EffortLevel.Low, [], WebSearch: false);
+
+        var failure = await Assert.ThrowsAsync<ClaudeException>(() => new ClaudeCodeClient(options).RunTurnAsync(request, new RecordingHandler(), CancellationToken.None));
+
+        Assert.Equal(ClaudeErrorKind.NotInstalled, failure.Kind);
+    }
+
+    [Fact]
     public void Prompt_is_the_message_alone_or_a_transcript()
     {
         Assert.Equal("hi", ClaudeCodeClient.BuildPrompt([new HistoryMessage(true, "hi")]));

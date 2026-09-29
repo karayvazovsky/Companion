@@ -192,28 +192,14 @@ public sealed class ClaudeCodeClient(ClaudeCodeOptions options) : IClaudeClient
     public async Task<TurnResult> RunTurnAsync(TurnRequest request, ITurnHandler handler, CancellationToken ct)
     {
         Directory.CreateDirectory(options.WorkingDirectory);
-        var start = new ProcessStartInfo(options.ExePath)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardInputEncoding = new UTF8Encoding(false),
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-            WorkingDirectory = options.WorkingDirectory,
-        };
-        foreach (var argument in BuildArguments(request, options)) start.ArgumentList.Add(argument);
-
-        using var process = new Process { StartInfo = start };
+        using var process = new Process { StartInfo = CreateStartInfo(request, options) };
         try
         {
             process.Start();
         }
         catch (Win32Exception ex)
         {
-            throw new ClaudeException(ClaudeErrorKind.NotInstalled, ex.Message, ex);
+            throw StartFailure(ex);
         }
 
         var stderrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
@@ -231,9 +217,11 @@ public sealed class ClaudeCodeClient(ClaudeCodeOptions options) : IClaudeClient
             Kill(process);
             throw;
         }
-        catch (IOException ex) when (!ct.IsCancellationRequested)
+        catch (IOException ex)
         {
+            // Stopping kills claude.exe, which breaks the pipes: that is a cancel, not a failure.
             Kill(process);
+            if (ct.IsCancellationRequested) throw new OperationCanceledException(ex.Message, ex, ct);
             throw new ClaudeException(ClaudeErrorKind.Unknown, ex.Message, ex);
         }
 
@@ -241,6 +229,37 @@ public sealed class ClaudeCodeClient(ClaudeCodeOptions options) : IClaudeClient
         if (!parser.Finished || parser.IsError) throw parser.ToFailure(stderr, ModelFor(request, options));
         return new TurnResult(parser.Text, parser.Stop, new UsageTotals());
     }
+
+    internal static ProcessStartInfo CreateStartInfo(TurnRequest request, ClaudeCodeOptions options)
+    {
+        var start = new ProcessStartInfo(options.ExePath)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardInputEncoding = new UTF8Encoding(false),
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+            WorkingDirectory = options.WorkingDirectory,
+        };
+        foreach (var argument in BuildArguments(request, options)) start.ArgumentList.Add(argument);
+        ScrubEnvironment(start.Environment);
+        return start;
+    }
+
+    /// <summary>An API key or token in the environment would make Claude Code bill the API instead of the subscription.</summary>
+    internal static void ScrubEnvironment(IDictionary<string, string?> environment)
+    {
+        environment.Remove("ANTHROPIC_API_KEY");
+        environment.Remove("ANTHROPIC_AUTH_TOKEN");
+    }
+
+    /// <summary>Only "file/path not found" means Claude Code is missing; anything else (access denied, bad exe) is shown as is.</summary>
+    internal static ClaudeException StartFailure(Win32Exception ex) => ex.NativeErrorCode is 2 or 3
+        ? new ClaudeException(ClaudeErrorKind.NotInstalled, ex.Message, ex)
+        : new ClaudeException(ClaudeErrorKind.Unknown, ex.Message, ex);
 
     internal static string ModelFor(TurnRequest request, ClaudeCodeOptions options) =>
         request.Effort == EffortLevel.High ? options.ThinkHarderModel : options.EverydayModel;
@@ -307,5 +326,6 @@ public sealed class ClaudeCodeClient(ClaudeCodeOptions options) : IClaudeClient
         }
         catch (InvalidOperationException) { }
         catch (Win32Exception) { }
+        catch (AggregateException) { }   // Kill(entireProcessTree) reports children it could not end this way
     }
 }
