@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Companion.Core;
 
@@ -58,8 +59,10 @@ public static class MemoryServerLocator
 }
 
 /// <summary>Reads Claude Code's <c>--output-format stream-json</c> lines for one turn.</summary>
-public sealed class ClaudeCodeStreamParser(ITurnHandler handler)
+public sealed partial class ClaudeCodeStreamParser(ITurnHandler handler)
 {
+    private static readonly string[] PlanLimitText = ["hit your limit", "limit reached", "usage limit", "rate limit"];
+    private static readonly Regex ServerErrorText = ServerErrorRegex();
     private readonly StringBuilder _text = new();
     private bool _firstTextThisMessage = true;
 
@@ -121,7 +124,7 @@ public sealed class ClaudeCodeStreamParser(ITurnHandler handler)
     {
         var detail = string.Join(" | ", new[] { ResultText, LastApiError, stderr.Trim() }.Where(s => !string.IsNullOrWhiteSpace(s)));
         if (detail.Length == 0) detail = "Claude Code exited without an answer.";
-        if (LimitRejected || LastApiErrorStatus == 429 || Has(detail, "usage limit") || Has(detail, "rate limit"))
+        if (LimitRejected || LastApiErrorStatus == 429 || PlanLimitText.Any(part => Has(detail, part)))
         {
             var when = LimitResetsAt is { } at ? $" It resets at {at.ToLocalTime():HH:mm}." : "";
             return new ClaudeException(ClaudeErrorKind.PlanLimit, detail, userMessage: $"You've reached your Claude plan's usage limit.{when}");
@@ -130,7 +133,7 @@ public sealed class ClaudeCodeStreamParser(ITurnHandler handler)
             return new ClaudeException(ClaudeErrorKind.NotLoggedIn, detail);
         if (Has(detail, "connection error") || Has(detail, "ENOTFOUND") || Has(detail, "ECONNREFUSED") || Has(detail, "network"))
             return new ClaudeException(ClaudeErrorKind.Network, detail);
-        if (LastApiErrorStatus >= 500 || Has(detail, "overloaded") || Has(detail, " 5"))
+        if (LastApiErrorStatus >= 500 || Has(detail, "overloaded") || ServerErrorText.IsMatch(detail))
             return new ClaudeException(ClaudeErrorKind.Server, detail);
         return new ClaudeException(ClaudeErrorKind.Unknown, detail);
     }
@@ -160,6 +163,9 @@ public sealed class ClaudeCodeStreamParser(ITurnHandler handler)
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static bool Has(string text, string part) => text.Contains(part, StringComparison.OrdinalIgnoreCase);
+
+    [GeneratedRegex(@"API Error: 5\d\d\b", RegexOptions.IgnoreCase)]
+    private static partial Regex ServerErrorRegex();
 }
 
 public sealed record ClaudeCodeOptions(

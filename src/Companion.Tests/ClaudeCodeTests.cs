@@ -104,6 +104,14 @@ public class ClaudeCodeTests
     [InlineData("Not logged in · Please run /login", ClaudeErrorKind.NotLoggedIn)]
     [InlineData("API Error: Connection error.", ClaudeErrorKind.Network)]
     [InlineData("API Error: 529 overloaded", ClaudeErrorKind.Server)]
+    [InlineData("API Error: 503 Service Unavailable", ClaudeErrorKind.Server)]
+    [InlineData("Overloaded", ClaudeErrorKind.Server)]
+    [InlineData("You've hit your limit · resets 5pm", ClaudeErrorKind.PlanLimit)]
+    [InlineData("Claude AI usage limit reached|1790281800", ClaudeErrorKind.PlanLimit)]
+    [InlineData("5-hour limit reached ∙ resets 5pm", ClaudeErrorKind.PlanLimit)]
+    [InlineData("Rate limit exceeded", ClaudeErrorKind.PlanLimit)]
+    [InlineData("resets 5pm", ClaudeErrorKind.Unknown)]
+    [InlineData("tried 5 times", ClaudeErrorKind.Unknown)]
     [InlineData("something odd", ClaudeErrorKind.Unknown)]
     public void Failures_are_classified(string result, ClaudeErrorKind expected)
     {
