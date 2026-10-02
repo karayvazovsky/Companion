@@ -80,7 +80,7 @@ Tell the user:
 
 Do each step only after the user agrees to it.
 
-1. **Email privacy.** Commits carry the author email. Offer to switch future commits to the GitHub no-reply address. Get it from `gh api user -q '"\(.id)+\(.login)@users.noreply.github.com"'`, then run `git config user.email <that>`. Also offer to rewrite the existing history to use it, with `git filter-branch --env-filter`. That rewrite can only happen before the first push.
+1. **Email privacy.** Commits carry the author email. Offer to switch future commits to the GitHub no-reply address. It's `<id>+<login>@users.noreply.github.com`, built from `gh api user -q .id` and `gh api user -q .login`. Then run `git config user.email <that>`. Also offer to rewrite the existing history to use it, with `git filter-branch --env-filter`. That rewrite can only happen before the first push.
 2. **Default branch.** Fast-forward `master` to the work branch with `git branch -f master <branch>` (only if `master` is an ancestor), then `git checkout master`.
 3. **Create the repo**, public, with `gh repo create Companion --public --source . --remote origin --description "A tiny pixel pet that lives on your Windows desktop and answers anything through Claude."`. Then run `git push -u origin master`.
 4. Continue with the normal flow. The first update covers `--root`. Make the showreel GIF and tag the current version, for example `v1.1`.
