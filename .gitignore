@@ -5,3 +5,5 @@ obj/
 /app/
 /data/
 /workspace/
+/outbox/
+.claude/settings.local.json
