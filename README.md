@@ -21,12 +21,13 @@ It hatches from an egg, lets you name it, wanders along your taskbar, naps when 
 Each update gets a devlog entry: the builder and the pet talking it over. Read the full story in **[DEVLOG.md](DEVLOG.md)**, or follow the [Releases](../../releases).
 
 <!-- progress -->
+- **2026-10-02 · v1.1**: Debut: Claudy hatches, chats through your Claude subscription, and now perches on windows, walls and ceilings, dangles from the cursor and teleports between monitors ([devlog](DEVLOG.md))
 
 ## Run it
 
-Requirements: Windows 10/11, the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0), and Claude Code installed and logged in (or an Anthropic API key).
+Requirements: Windows 10/11 (64-bit). For chatting, you also need [Claude Code](https://claude.com/claude-code) installed and logged in, or an Anthropic API key.
 
-- **From a release:** download the zip from [Releases](../../releases), unzip it anywhere, and run `app\Companion.exe`.
+- **Download (easiest):** get `Companion-v1.1-win-x64.zip` from the [latest release](../../releases/latest). Unzip it and run `Companion\app\Companion.exe`. The .NET runtime is bundled, so there's nothing else to install. If SmartScreen warns you, click *More info*, then *Run anyway*.
 - **From source:** install the .NET 10 SDK, then run:
 
   ```powershell

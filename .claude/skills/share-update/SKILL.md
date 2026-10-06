@@ -55,10 +55,26 @@ Fill `{{REPO_URL}}` in `outbox/<DATE>/release.md` and `social.md` with `gh repo 
 
 If the user wants a build attached:
 
+Build a self-contained copy so friends don't need .NET installed. This leaves the user's own `app\` alone:
+
 ```
-powershell -File tools/publish.ps1
-Compress-Archive -Path app, skins -DestinationPath outbox\<DATE>\Companion-<TAG>-win-x64.zip -Force
+$pkg = "outbox\<DATE>\Companion"
+dotnet publish src\Companion\Companion.csproj -c Release -r win-x64 --self-contained true -o "$pkg\app"
+dotnet publish src\Companion.Memory\Companion.Memory.csproj -c Release -r win-x64 --self-contained true -o "$pkg\app"
+Copy-Item skins "$pkg\skins" -Recurse
 ```
+
+Copy `START HERE.txt` from the previous outbox package, or write one: how to unzip and run it, what to do about SmartScreen, the Claude Code login, and the repo link.
+
+Smoke-test it: start `$pkg\app\Companion.exe`, check it's still running after 6 seconds, stop it, then delete `$pkg\data`. If the user's own Companion is running, skip this test, because the single-instance lock would make it exit.
+
+Zip it with `tar`, which writes forward-slash paths that every unzip tool reads. `Compress-Archive` writes backslashes, so don't use it:
+
+```
+cd outbox\<DATE>; tar.exe -a -c -f Companion-<TAG>-win-x64.zip Companion
+```
+
+Make sure the release notes' "Try it" section points at the zip.
 
 Then create the release. Leave out the zip if they said no:
 
